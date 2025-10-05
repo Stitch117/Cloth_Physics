@@ -14,6 +14,8 @@
 #include <vector>
 
 #include "GameObject.h"
+#define FPS60 1.0f/60.0f 
+#define FPS120 1.0f/120.0f 
 
 using namespace DirectX;
 
@@ -70,8 +72,21 @@ private:
 	ID3D11DepthStencilState* _DSLessEqual;
 	ID3D11RasterizerState* _RSCullNone;
 
-	ID3D11RasterizerState* _CCWcullMode; //Counter Clockwise
-	ID3D11RasterizerState* _CWcullMode; //Clockwise
+	ID3D11RasterizerState* _CWcullModeFill; //Fill
+	ID3D11RasterizerState* _CWcullModeWire; //WireFrame
+	enum CurrentState {
+		WIRE,
+		FILL
+	};
+	int CurrentStateInt = 0;
+
+	float accumulator = 0.0f;
+	enum FPSType {
+		SIXTYFPS,
+		ONEHUNDREDTWENTYFPS
+	};
+	int CurrentFPSInt = 0;
+
 
 private:
 	HRESULT CreateWindowHandle(HINSTANCE hInstance, int nCmdShow);

@@ -15,6 +15,9 @@
     <Filter Include="Helpers">
       <UniqueIdentifier>{9c796f30-1066-4157-a18b-1202b10ee0ac}</UniqueIdentifier>
     </Filter>
+    <Filter Include="IMGUI">
+      <UniqueIdentifier>{f3e7deb9-d24c-4eb8-8262-1d100298fb69}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DX11PhysicsFramework.h" />
@@ -38,6 +41,24 @@
     </ClCompile>
     <ClCompile Include="DDSTextureLoader.cpp">
       <Filter>Helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui-master\imgui_widgets.cpp">
+      <Filter>IMGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui-master\imgui.cpp">
+      <Filter>IMGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui-master\imgui_draw.cpp">
+      <Filter>IMGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui-master\imgui_tables.cpp">
+      <Filter>IMGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui-master\backends\imgui_impl_dx11.cpp">
+      <Filter>IMGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="imgui-master\backends\imgui_impl_win32.cpp">
+      <Filter>IMGUI</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

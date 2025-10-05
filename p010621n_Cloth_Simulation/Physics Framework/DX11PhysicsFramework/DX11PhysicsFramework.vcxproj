@@ -97,7 +97,7 @@
     <LinkIncremental>true</LinkIncremental>
     <GenerateManifest>true</GenerateManifest>
     <ExecutablePath>$(DXSDK_DIR)Utilities\bin\x64;$(DXSDK_DIR)Utilities\bin\x86;$(ExecutablePath)</ExecutablePath>
-    <IncludePath>$(DXSDK_DIR)Include;$(IncludePath)</IncludePath>
+    <IncludePath>$(DXSDK_DIR)Include;$(ProjectDir)imgui-master\;$(ProjectDir)imgui-master\backends;$(IncludePath)</IncludePath>
     <LibraryPath>$(DXSDK_DIR)Lib\x64;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -373,6 +373,12 @@
     <ClCompile Include="DX11PhysicsFramework.cpp" />
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="DDSTextureLoader.cpp" />
+    <ClCompile Include="imgui-master\backends\imgui_impl_dx11.cpp" />
+    <ClCompile Include="imgui-master\backends\imgui_impl_win32.cpp" />
+    <ClCompile Include="imgui-master\imgui.cpp" />
+    <ClCompile Include="imgui-master\imgui_draw.cpp" />
+    <ClCompile Include="imgui-master\imgui_tables.cpp" />
+    <ClCompile Include="imgui-master\imgui_widgets.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="GameObject.cpp" />
     <ClCompile Include="OBJLoader.cpp" />

@@ -2,6 +2,11 @@
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
+	//imGui
+	extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+	if (ImGui_ImplWin32_WndProcHandler(hWnd, message, wParam, lParam))
+		return true;
+
 	PAINTSTRUCT ps;
 	HDC hdc;
 
@@ -408,6 +413,16 @@ HRESULT DX11PhysicsFramework::InitRunTimeData()
 
 	_gameObjects.push_back(gameObject);
 
+	// Setup Dear ImGui context
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+
+	// Setup Platform/Renderer backends
+	ImGui_ImplWin32_Init(_windowHandle);
+	ImGui_ImplDX11_Init(_device, _immediateContext);
+
 	return S_OK;
 }
 
@@ -446,6 +461,10 @@ DX11PhysicsFramework::~DX11PhysicsFramework()
 	if (_dxgiDevice)_dxgiDevice->Release();
 	if (_dxgiFactory)_dxgiFactory->Release();
 	if (_device)_device->Release();
+
+	ImGui_ImplDX11_Shutdown(); 
+	ImGui_ImplWin32_Shutdown(); 
+	ImGui::DestroyContext(); 
 }
 
 void DX11PhysicsFramework::Update()
@@ -469,26 +488,6 @@ void DX11PhysicsFramework::Update()
 	{
 		while (accumulator >= FPS60)
 		{
-
-			// Keyboard Interaction
-			if (GetAsyncKeyState(VK_SPACE))  //change betwen wire frame and fill on space pressed
-			{
-				if (CurrentStateInt == WIRE)
-				{
-					_immediateContext->RSSetState(_CWcullModeFill);
-					CurrentStateInt = FILL;
-				}
-				else if (CurrentStateInt == FILL)
-				{
-					_immediateContext->RSSetState(_CWcullModeWire);
-					CurrentStateInt = WIRE;
-				}
-			}
-			if (GetAsyncKeyState('1'))  //change betwen 60FPS and 120FPS on IMGUI Button pressed
-			{
-				CurrentFPSInt = ONEHUNDREDTWENTYFPS;
-			}
-
 			_camera->Update();
 
 			// Update objects
@@ -506,26 +505,6 @@ void DX11PhysicsFramework::Update()
 	{
 		while (accumulator >= FPS120)
 		{
-
-			// Keyboard Interaction
-			if (GetAsyncKeyState(VK_SPACE))  //change betwen wire frame and fill on IMGUI button pressed
-			{
-				if (CurrentStateInt == WIRE)
-				{
-					_immediateContext->RSSetState(_CWcullModeFill);
-					CurrentStateInt = FILL;
-				}
-				else if (CurrentStateInt == FILL)
-				{
-					_immediateContext->RSSetState(_CWcullModeWire);
-					CurrentStateInt = WIRE;
-				}
-			}
-			if (GetAsyncKeyState('1'))  //change betwen 60FPS and 120FPS on IMGUI Button pressed
-			{
-				CurrentFPSInt = SIXTYFPS;
-			}
-
 			_camera->Update();
 
 			// Update objects
@@ -544,6 +523,11 @@ void DX11PhysicsFramework::Update()
 
 void DX11PhysicsFramework::Draw()
 {
+	// Start the Dear ImGui frame
+	ImGui_ImplDX11_NewFrame(); 
+	ImGui_ImplWin32_NewFrame(); 
+	ImGui::NewFrame(); 
+
     //
     // Clear buffers
     //
@@ -609,7 +593,48 @@ void DX11PhysicsFramework::Draw()
 		gameObject->Draw(_immediateContext);
 	}
 
-    //
+	//imGui menues
+	// Create a window for changing the framerate
+	ImGui::Begin("FrameRate Buttons");
+
+	// Display contents in a scrolling region
+	ImGui::TextColored(ImVec4(1, 1, 1, 1), "Click to change the frame rate");
+	ImGui::BeginChild("60FPS Button");
+	if (ImGui::Button("60FPS", ImVec2(100, 40))) //button to change to 60 FPS
+	{
+		CurrentFPSInt = SIXTYFPS;
+	}
+	if (ImGui::Button("120FPS", ImVec2(100, 40))) //button to change to 120 FPS
+	{
+		CurrentFPSInt = ONEHUNDREDTWENTYFPS;
+	}
+	ImGui::EndChild();
+	ImGui::End();
+
+
+	ImGui::Begin("Rasterizer Buttons");
+
+	// Display contents in a scrolling region
+	ImGui::TextColored(ImVec4(1, 1, 1, 1), "Click to change the cull type");
+	ImGui::BeginChild("Wireframe Button");
+	if (ImGui::Button("Wire Frame", ImVec2(100, 40)))
+	{
+		_immediateContext->RSSetState(_CWcullModeWire);
+		CurrentStateInt = WIRE;
+	}
+	if (ImGui::Button("Full Face", ImVec2(100, 40)))
+	{
+		_immediateContext->RSSetState(_CWcullModeFill);
+		CurrentStateInt = FILL;
+	}
+	ImGui::EndChild();
+	ImGui::End();
+
+	// Rendering imGui
+	ImGui::Render();
+	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+	
+	// 
     // Present our back buffer to our front buffer
     //
     _swapChain->Present(0, 0);

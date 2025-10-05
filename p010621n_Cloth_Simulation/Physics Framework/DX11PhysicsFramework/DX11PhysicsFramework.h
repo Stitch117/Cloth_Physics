@@ -87,6 +87,10 @@ private:
 	};
 	int CurrentFPSInt = 0;
 
+	//timer variables
+	LARGE_INTEGER TimerFrequency;
+	LARGE_INTEGER prevTime;
+	LARGE_INTEGER currentTime;
 
 private:
 	HRESULT CreateWindowHandle(HINSTANCE hInstance, int nCmdShow);

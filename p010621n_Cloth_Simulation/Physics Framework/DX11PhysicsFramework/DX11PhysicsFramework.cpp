@@ -450,15 +450,18 @@ DX11PhysicsFramework::~DX11PhysicsFramework()
 
 void DX11PhysicsFramework::Update()
 {
-	//Static initializes this value only once    
-	static ULONGLONG frameStart = GetTickCount64();
+	QueryPerformanceFrequency(&TimerFrequency); //gives frequency variable's last QUAD the amount of ticks in one second
 
-	ULONGLONG frameNow = GetTickCount64();
-	float deltaTime = (frameNow - frameStart) / 1000.0f;
-	frameStart = frameNow;
+	QueryPerformanceCounter(&currentTime); //stores the current tick of the second in the QUAD 
 
-	static float simpleCount = 0.0f;
-	simpleCount += deltaTime;
+	//compare the previous to the current to not add multiple ticks per tick
+	if (prevTime.QuadPart == 0)
+	{
+		prevTime = currentTime;
+	}
+
+	float deltaTime = static_cast<float>(currentTime.QuadPart - prevTime.QuadPart) / TimerFrequency.QuadPart; //get the amount of ticks from last frme to this frame. Divide by total to transform it into seconds
+	prevTime = currentTime;
 
 	accumulator += deltaTime;
 
@@ -531,6 +534,9 @@ void DX11PhysicsFramework::Update()
 				gameObject->Update(deltaTime);
 			}
 
+
+			string timeText = std::to_string(accumulator);
+			OutputDebugStringA(timeText.c_str());
 			accumulator -= FPS120;
 		}
 	}

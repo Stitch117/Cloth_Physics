@@ -473,20 +473,14 @@ DX11PhysicsFramework::~DX11PhysicsFramework()
 
 void DX11PhysicsFramework::Update()
 {
-	QueryPerformanceFrequency(&TimerFrequency); //gives frequency variable's last QUAD the amount of ticks in one second
-
-	QueryPerformanceCounter(&currentTime); //stores the current tick of the second in the QUAD 
-
-	//compare the previous to the current to not add multiple ticks per tick
-	if (prevTime.QuadPart == 0)
-	{
-		prevTime = currentTime;
-	}
-
-	float deltaTime = static_cast<float>(currentTime.QuadPart - prevTime.QuadPart) / TimerFrequency.QuadPart; //get the amount of ticks from last frme to this frame. Divide by total to transform it into seconds
-	prevTime = currentTime;
+	static auto last = chrono::steady_clock::now();
+	auto old = last;
+	last = chrono::steady_clock::now();
+	const chrono::duration<float> frameTime = last - old;
+	float deltaTime = frameTime.count();
 
 	accumulator += deltaTime;
+
 	if (CurrentFPSInt == NATURALFPS) // run at natural FPS
 	{
 		_camera->Update();
@@ -529,10 +523,10 @@ void DX11PhysicsFramework::Update()
 				FPSAverageIndex = 0;
 			}
 
-
 			accumulator -= FPS60;
 		}
 	}
+
 	else if (CurrentFPSInt == ONEHUNDREDTWENTYFPS)  //run the update lop if on 120FPS
 	{
 		while (accumulator >= FPS120)
@@ -561,7 +555,7 @@ void DX11PhysicsFramework::Update()
 	}
 
 
-	float tempFpsTotal = 0;
+	double tempFpsTotal = 0;
 	for (int i = 0; i < FPSAverageNums.size(); i++)
 	{
 		tempFpsTotal += FPSAverageNums[i];

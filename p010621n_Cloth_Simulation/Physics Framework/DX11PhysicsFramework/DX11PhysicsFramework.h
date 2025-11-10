@@ -5,6 +5,7 @@
 #include <d3dcompiler.h>
 #include <directxmath.h>
 #include <directxcolors.h>
+#include <chrono>
 #include "DDSTextureLoader.h"
 #include "resource.h"
 #include "Camera.h"
@@ -99,8 +100,8 @@ private:
 	int CurrentFPSInt = 1;
 	int CurrentFPS;
 
-	vector<float> FPSAverageNums;
-	int FPSAverageIndex = 0;
+	vector<double> FPSAverageNums;
+	double FPSAverageIndex = 0;
 
 	//timer variables
 	LARGE_INTEGER TimerFrequency;

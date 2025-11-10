@@ -491,6 +491,7 @@ void DX11PhysicsFramework::Update()
 			gameObject->Update(deltaTime);
 		}
 
+
 		FPSAverageNums[FPSAverageIndex] = 1.0f / deltaTime;
 		FPSAverageIndex++;
 

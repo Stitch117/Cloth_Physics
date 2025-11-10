@@ -101,7 +101,7 @@ private:
 	int CurrentFPS;
 
 	vector<double> FPSAverageNums;
-	double FPSAverageIndex = 0;
+	int FPSAverageIndex = 0;
 
 	//timer variables
 	LARGE_INTEGER TimerFrequency;

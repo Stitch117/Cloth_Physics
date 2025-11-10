@@ -419,6 +419,10 @@ HRESULT DX11PhysicsFramework::InitRunTimeData()
 	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 
+	//Resize FPS Vector
+	FPSAverageNums.resize(10);
+
+
 	// Setup Platform/Renderer backends
 	ImGui_ImplWin32_Init(_windowHandle);
 	ImGui_ImplDX11_Init(_device, _immediateContext);
@@ -483,8 +487,28 @@ void DX11PhysicsFramework::Update()
 	prevTime = currentTime;
 
 	accumulator += deltaTime;
+	if (CurrentFPSInt == NATURALFPS) // run at natural FPS
+	{
+		_camera->Update();
 
-	if (CurrentFPSInt == SIXTYFPS)  //run the update lop if on 60FPS
+		// Update objects
+		for (auto gameObject : _gameObjects)
+		{
+			gameObject->Update(deltaTime);
+		}
+
+		FPSAverageNums[FPSAverageIndex] = 1.0f / deltaTime;
+		FPSAverageIndex++;
+
+
+		//average FPS over 10 frames
+		if (FPSAverageIndex == 10)
+		{
+			FPSAverageIndex = 0;
+		}
+	}
+
+	else if (CurrentFPSInt == SIXTYFPS)  //run the update loop if on 60FPS
 	{
 		while (accumulator >= FPS60)
 		{
@@ -496,8 +520,16 @@ void DX11PhysicsFramework::Update()
 				gameObject->Update(deltaTime);
 			}
 
-			string timeText = std::to_string(accumulator);
-			OutputDebugStringA(timeText.c_str());
+			FPSAverageNums[FPSAverageIndex] = 1.0f / accumulator;
+			FPSAverageIndex++;
+
+			//average FPS over 10 frames
+			if (FPSAverageIndex == 10)
+			{
+				FPSAverageIndex = 0;
+			}
+
+
 			accumulator -= FPS60;
 		}
 	}
@@ -513,12 +545,29 @@ void DX11PhysicsFramework::Update()
 				gameObject->Update(deltaTime);
 			}
 
+			FPSAverageNums[FPSAverageIndex] = 1.0f / accumulator;
+			FPSAverageIndex++;
 
-			string timeText = std::to_string(accumulator);
-			OutputDebugStringA(timeText.c_str());
+
+			//average FPS over 10 frames
+			if (FPSAverageIndex == 10)
+			{
+				FPSAverageIndex = 0;
+			}
+
+
 			accumulator -= FPS120;
 		}
 	}
+
+
+	float tempFpsTotal = 0;
+	for (int i = 0; i < FPSAverageNums.size(); i++)
+	{
+		tempFpsTotal += FPSAverageNums[i];
+	}
+
+	CurrentFPS = tempFpsTotal / FPSAverageNums.size();
 }
 
 void DX11PhysicsFramework::Draw()
@@ -598,15 +647,23 @@ void DX11PhysicsFramework::Draw()
 	ImGui::Begin("FrameRate Buttons");
 
 	// Display contents in a scrolling region
+	ImGui::TextColored(ImVec4(1, 1, 1, 1), "Current FPS rate: %d", CurrentFPS);
 	ImGui::TextColored(ImVec4(1, 1, 1, 1), "Click to change the frame rate");
-	ImGui::BeginChild("60FPS Button");
+	ImGui::BeginChild("NaturalFPS Button");
+	if (ImGui::Button("NaturalFPS", ImVec2(100, 40))) //button to change to 60 FPS
+	{
+		CurrentFPSInt = NATURALFPS;
+		FPSAverageIndex = 0;
+	}
 	if (ImGui::Button("60FPS", ImVec2(100, 40))) //button to change to 60 FPS
 	{
 		CurrentFPSInt = SIXTYFPS;
+		FPSAverageIndex = 0;
 	}
 	if (ImGui::Button("120FPS", ImVec2(100, 40))) //button to change to 120 FPS
 	{
 		CurrentFPSInt = ONEHUNDREDTWENTYFPS;
+		FPSAverageIndex = 0;
 	}
 	ImGui::EndChild();
 	ImGui::End();

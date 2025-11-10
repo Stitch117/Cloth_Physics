@@ -79,18 +79,28 @@ private:
 
 	ID3D11RasterizerState* _CWcullModeFill; //Fill
 	ID3D11RasterizerState* _CWcullModeWire; //WireFrame
-	enum CurrentState {
+
+	enum CurrentState 
+	{
 		WIRE,
 		FILL
 	};
 	int CurrentStateInt = 0;
 
 	float accumulator = 0.0f;
-	enum FPSType {
+
+	//FPS data
+	enum FPSType 
+	{
+		NATURALFPS,
 		SIXTYFPS,
 		ONEHUNDREDTWENTYFPS
 	};
-	int CurrentFPSInt = 0;
+	int CurrentFPSInt = 1;
+	int CurrentFPS;
+
+	vector<float> FPSAverageNums;
+	int FPSAverageIndex = 0;
 
 	//timer variables
 	LARGE_INTEGER TimerFrequency;

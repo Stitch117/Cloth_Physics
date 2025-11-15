@@ -42,37 +42,40 @@ cbuffer ConstantBuffer : register( b0 )
 
 struct VS_INPUT
 {
-	float4 PosL : POSITION;
-	float3 NormL : NORMAL;
-	float2 Tex : TEXCOORD0;
+    float3 Pos : POSITION;
+    float3 PrevPos : PREVPOS;
+    float3 Normal : NORMAL;
+    float3 Velocity : VELOCITY;
+    float3 AccumulatedForce : ACCUMULATEDFORCE;
+    float Mass : MASS;
+    float2 Tex : TEXCOORD0;
 };
 
 //--------------------------------------------------------------------------------------
 struct VS_OUTPUT
 {
-    float4 PosH : SV_POSITION;
-	float3 NormW : NORMAL;
-
-	float3 PosW : POSITION;
-	float2 Tex : TEXCOORD0;
+    float4 PosH : SV_POSITION; // REQUIRED final clip-space position
+    float3 PosW : POSITION; // world position
+    float3 NormW : NORMAL; // world normal
+    float3 WorldVelocity : VELOCITY;
+    float2 Tex : TEXCOORD0;
 };
 
-//--------------------------------------------------------------------------------------
-// Vertex Shader
-//--------------------------------------------------------------------------------------
 VS_OUTPUT VS_main(VS_INPUT input)
 {
-    VS_OUTPUT output = (VS_OUTPUT)0;
+    VS_OUTPUT output;
 
-	float4 posW = mul(input.PosL, World);
-	output.PosW = posW.xyz;
+    float4 posL = float4(input.Pos, 1.0f);
+    float4 posW = mul(posL, World);
+    output.PosW = posW.xyz;
 
-	output.PosH = mul(posW, View);
-	output.PosH = mul(output.PosH, Projection);
-	output.Tex = input.Tex;
+    float4 posH = mul(posW, View);
+    posH = mul(posH, Projection);
+    output.PosH = posH; // << REQUIRED
 
-	float3 normalW = mul(float4(input.NormL, 0.0f), World).xyz;
-	output.NormW = normalize(normalW);
+    output.NormW = normalize(mul(float4(input.Normal, 0), World).xyz);
+    output.WorldVelocity = input.Velocity;
+    output.Tex = input.Tex;
 
     return output;
 }

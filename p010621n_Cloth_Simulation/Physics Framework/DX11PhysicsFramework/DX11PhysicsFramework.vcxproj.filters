@@ -23,9 +23,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="OBJLoader.h">
-      <Filter>Helpers</Filter>
-    </ClInclude>
     <ClInclude Include="DDSTextureLoader.h">
       <Filter>Helpers</Filter>
     </ClInclude>
@@ -47,9 +44,6 @@
     <ClCompile Include="GameObject.cpp" />
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="Main.cpp" />
-    <ClCompile Include="OBJLoader.cpp">
-      <Filter>Helpers</Filter>
-    </ClCompile>
     <ClCompile Include="DDSTextureLoader.cpp">
       <Filter>Helpers</Filter>
     </ClCompile>
@@ -94,5 +88,10 @@
     <ResourceCompile Include="DX11PhysicsFramework.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="ComputeShader.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>

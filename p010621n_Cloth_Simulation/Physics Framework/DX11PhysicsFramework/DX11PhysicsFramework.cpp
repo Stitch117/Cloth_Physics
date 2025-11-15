@@ -46,25 +46,25 @@ HRESULT DX11PhysicsFramework::Initialise(HINSTANCE hInstance, int nShowCmd)
 	HRESULT hr = S_OK;
 
 	hr = CreateWindowHandle(hInstance, nShowCmd);
-	if (FAILED(hr)) return E_FAIL;
+	if (FAILED(hr)) { OutputDebugStringA("FAIL: CreateWindowHandle\n"); return hr; }
 
 	hr = CreateD3DDevice();
-	if (FAILED(hr)) return E_FAIL;
+	if (FAILED(hr)) { OutputDebugStringA("FAIL: CreateD3DDevice\n"); return hr; }
 
 	hr = CreateSwapChainAndFrameBuffer();
-	if (FAILED(hr)) return E_FAIL;
+	if (FAILED(hr)) { OutputDebugStringA("FAIL: SwapChain\n"); return hr; }
 
 	hr = InitShadersAndInputLayout();
-	if (FAILED(hr)) return E_FAIL;
+	if (FAILED(hr)) { OutputDebugStringA("FAIL: InitShadersAndInputLayout\n"); return hr; }
 
 	hr = InitVertexIndexBuffers();
-	if (FAILED(hr)) return E_FAIL;
+	if (FAILED(hr)) { OutputDebugStringA("FAIL: InitVertexIndexBuffers\n"); return hr; }
 
 	hr = InitPipelineStates();
-	if (FAILED(hr)) return E_FAIL;
+	if (FAILED(hr)) { OutputDebugStringA("FAIL: InitPipelineStates\n"); return hr; }
 
 	hr = InitRunTimeData();
-	if (FAILED(hr)) return E_FAIL;
+	if (FAILED(hr)) { OutputDebugStringA("FAIL: InitRunTimeData\n"); return hr; }
 
 	return hr;
 }
@@ -234,14 +234,21 @@ HRESULT DX11PhysicsFramework::InitShadersAndInputLayout()
     // Define the input layout
     D3D11_INPUT_ELEMENT_DESC inputElementDesc[] =
     {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "POSITION",  0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,   D3D11_INPUT_PER_VERTEX_DATA, 0 },		 // position
+		{ "PREVPOS",  0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12,  D3D11_INPUT_PER_VERTEX_DATA, 0 },			 // PrevPos
+		{ "NORMAL",    0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 24,  D3D11_INPUT_PER_VERTEX_DATA, 0 },		 // Normal
+		{ "VELOCITY",  0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 36,  D3D11_INPUT_PER_VERTEX_DATA, 0 },		 // Velocity
+		{ "ACCUMULATEDFORCE",  0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 48,  D3D11_INPUT_PER_VERTEX_DATA, 0 }, // accumulatedForce
+		{ "MASS",  0, DXGI_FORMAT_R32_FLOAT,       0, 60,  D3D11_INPUT_PER_VERTEX_DATA, 0 },			 // mass
+		{ "TEXCOORD",  0, DXGI_FORMAT_R32G32_FLOAT,    0, 64,  D3D11_INPUT_PER_VERTEX_DATA, 0 },		 // TexCoord
 	};
 
     // Create the input layout
 	hr = _device->CreateInputLayout(inputElementDesc, ARRAYSIZE(inputElementDesc), vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), &_inputLayout);
-	
+
+	if (FAILED(hr))
+		return hr;
+
 	vsBlob->Release();
 	psBlob->Release();
 	errorBlob->Release();
@@ -257,46 +264,37 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 
     D3D11_SUBRESOURCE_DATA InitData;
 
-	// Create vertex buffer
-	SimpleVertex planeVertices[] =
+	//get total verticies in the cloth
+	totalParticles = NumberVerticiesX * NumberVerticiesY;
+	float spacing = 0.1f;
+
+	for (int y = 0; y < NumberVerticiesY; y++)
 	{
-		{ XMFLOAT3(-1.0f, -1.0f, 0.0f), XMFLOAT3(0.0f, 0.0f, -1.0f), XMFLOAT2(0.0f, 5.0f) },
-		{ XMFLOAT3(1.0f, -1.0f, 0.0f), XMFLOAT3(0.0f, 0.0f, -1.0f), XMFLOAT2(5.0f, 5.0f) },
-		{ XMFLOAT3(1.0f, 1.0f, 0.0f), XMFLOAT3(0.0f, 0.0f, -1.0f), XMFLOAT2(5.0f, 0.0f) },
-		{ XMFLOAT3(-1.0f, 1.0f, 0.0f), XMFLOAT3(0.0f, 0.0f, -1.0f), XMFLOAT2(0.0f, 0.0f) },
-	};
-	
+		for (int x = 0; x < NumberVerticiesX; x++)
+		{
+			Particle p;
+			p.Pos.x = (x - NumberVerticiesX / 2.0f) * spacing;
+			p.Pos.y = (y - NumberVerticiesY / 2.0f) * spacing;
+			p.Pos.z = 0.0f; //flat cloth on XY plane
+			p.Normal = XMFLOAT3(0, 0, -1);
+			particles.push_back(p);
+		}
+	}
 
-	ZeroMemory(&bd, sizeof(bd));
-	bd.Usage = D3D11_USAGE_DEFAULT;
-	bd.ByteWidth = sizeof(SimpleVertex) * 4;
-	bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-	bd.CPUAccessFlags = 0;
+	//deifne a buffer for the cloth
+	D3D11_BUFFER_DESC bufferDesc = {};
+	bufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	bufferDesc.ByteWidth = sizeof(Particle) * particles.size();
+	bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	bufferDesc.CPUAccessFlags = 0;
+	bufferDesc.MiscFlags = 0;
 
-	ZeroMemory(&InitData, sizeof(InitData));
-	InitData.pSysMem = planeVertices;
+	D3D11_SUBRESOURCE_DATA vertexData = {};
+	vertexData.pSysMem = particles.data();
 
-	hr = _device->CreateBuffer(&bd, &InitData, &_planeVertexBuffer);
+	hr = _device->CreateBuffer(&bufferDesc, &vertexData, &pParticleBuffer); 
 
-	if (FAILED(hr))
-		return hr;
-
-	// Create plane index buffer
-	WORD planeIndices[] =
-	{
-		0, 3, 1,
-		3, 2, 1,
-	};
-
-	ZeroMemory(&bd, sizeof(bd));
-	bd.Usage = D3D11_USAGE_DEFAULT;
-	bd.ByteWidth = sizeof(WORD) * 6;
-	bd.BindFlags = D3D11_BIND_INDEX_BUFFER;
-	bd.CPUAccessFlags = 0;
-
-	ZeroMemory(&InitData, sizeof(InitData));
-	InitData.pSysMem = planeIndices;
-	hr = _device->CreateBuffer(&bd, &InitData, &_planeIndexBuffer);
+	//define index buffer
 
 	if (FAILED(hr))
 		return hr;
@@ -375,8 +373,8 @@ HRESULT DX11PhysicsFramework::InitRunTimeData()
 	if (FAILED(hr)) { return hr; }
 
 	// Setup Camera
-	XMFLOAT3 eye = XMFLOAT3(0.0f, 2.0f, -1.0f);
-	XMFLOAT3 at = XMFLOAT3(0.0f, 2.0f, 0.0f);
+	XMFLOAT3 eye = XMFLOAT3(0.0f, 0.0f, -6.0f);
+	XMFLOAT3 at = XMFLOAT3(0.0f, 0.0f, 0.0f);
 	XMFLOAT3 up = XMFLOAT3(0.0f, 1.0f, 0.0f);
 
 	_camera = new Camera(eye, at, up, (float)_WindowWidth, (float)_WindowHeight, 0.01f, 200.0f);
@@ -388,13 +386,6 @@ HRESULT DX11PhysicsFramework::InitRunTimeData()
 	basicLight.SpecularPower = 10.0f;
 	basicLight.LightVecW = XMFLOAT3(0.0f, 0.5f, -1.0f);
 
-	Geometry planeGeometry;
-	planeGeometry.indexBuffer = _planeIndexBuffer;
-	planeGeometry.vertexBuffer = _planeVertexBuffer;
-	planeGeometry.numberOfIndices = 6;
-	planeGeometry.vertexBufferOffset = 0;
-	planeGeometry.vertexBufferStride = sizeof(SimpleVertex);
-
 	Material shinyMaterial;
 	shinyMaterial.ambient = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	shinyMaterial.diffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -405,13 +396,7 @@ HRESULT DX11PhysicsFramework::InitRunTimeData()
 	noSpecMaterial.diffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	noSpecMaterial.specular = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
 
-	GameObject* gameObject = new GameObject("Floor", planeGeometry, noSpecMaterial);
-	gameObject->SetPosition(0.0f, 0.0f, 0.0f);
-	gameObject->SetScale(15.0f, 15.0f, 15.0f);
-	gameObject->SetRotation(XMConvertToRadians(90.0f), 0.0f, 0.0f);
-	gameObject->SetTextureRV(_GroundTextureRV);
-
-	_gameObjects.push_back(gameObject);
+	//define gameobjects
 
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
@@ -450,9 +435,6 @@ DX11PhysicsFramework::~DX11PhysicsFramework()
 	if (_inputLayout)_inputLayout->Release();
 	if (_pixelShader)_pixelShader->Release();
 	if (_constantBuffer)_constantBuffer->Release();
-
-	if (_planeVertexBuffer)_planeVertexBuffer->Release();
-	if (_planeIndexBuffer)_planeIndexBuffer->Release();
 	
 	if (_DSLessEqual) _DSLessEqual->Release();
 	if (_RSCullNone) _RSCullNone->Release();
@@ -565,6 +547,8 @@ void DX11PhysicsFramework::Update()
 	CurrentFPS = tempFpsTotal / FPSAverageNums.size();
 }
 
+
+
 void DX11PhysicsFramework::Draw()
 {
 	// Start the Dear ImGui frame
@@ -589,6 +573,7 @@ void DX11PhysicsFramework::Draw()
 	_immediateContext->VSSetConstantBuffers(0, 1, &_constantBuffer);
 	_immediateContext->PSSetConstantBuffers(0, 1, &_constantBuffer);
 	_immediateContext->PSSetSamplers(0, 1, &_samplerLinear);
+	_immediateContext->IASetInputLayout(_inputLayout);
 
 	XMFLOAT4X4 tempView = _camera->GetView();
 	XMFLOAT4X4 tempProjection = _camera->GetProjection();
@@ -602,40 +587,25 @@ void DX11PhysicsFramework::Draw()
 	_cbData.light = basicLight;
 	_cbData.EyePosW = _camera->GetPosition();
 
-	// Render all scene objects
-	for (auto gameObject : _gameObjects)
+	_cbData.World = XMMatrixTranspose(XMMatrixIdentity());
+
+	//draw cloth
+	D3D11_MAPPED_SUBRESOURCE mapped = {};
+	HRESULT hr = _immediateContext->Map(_constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+	if (SUCCEEDED(hr))
 	{
-		// Get render material
-		Material material = gameObject->GetMaterial();
-
-		// Copy material to shader
-		_cbData.surface.AmbientMtrl = material.ambient;
-		_cbData.surface.DiffuseMtrl = material.diffuse;
-		_cbData.surface.SpecularMtrl = material.specular;
-
-		// Set world matrix
-		_cbData.World = XMMatrixTranspose(gameObject->GetWorldMatrix());
-
-		// Set texture
-		if (gameObject->HasTexture())
-		{
-			_immediateContext->PSSetShaderResources(0, 1, gameObject->GetTextureRV());
-			_cbData.HasTexture = 1.0f;
-		}
-		else
-		{
-			_cbData.HasTexture = 0.0f;
-		}
-
-		//Write constant buffer data onto GPU
-		D3D11_MAPPED_SUBRESOURCE mappedSubresource;
-		_immediateContext->Map(_constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
-		memcpy(mappedSubresource.pData, &_cbData, sizeof(_cbData));
+		memcpy(mapped.pData, &_cbData, sizeof(_cbData));
 		_immediateContext->Unmap(_constantBuffer, 0);
-
-		// Draw object
-		gameObject->Draw(_immediateContext);
 	}
+
+
+
+	UINT stride = sizeof(Particle);
+	UINT offset = 0;
+	_immediateContext->IASetVertexBuffers(0, 1, &pParticleBuffer, &stride, &offset);
+	_immediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
+	_immediateContext->Draw(particles.size(), 0);
+
 
 	//imGui menues
 	// Create a window for changing the framerate

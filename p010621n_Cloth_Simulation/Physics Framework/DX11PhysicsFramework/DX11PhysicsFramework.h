@@ -10,7 +10,6 @@
 #include "resource.h"
 #include "Camera.h"
 #include "Structures.h"
-#include "OBJLoader.h"
 
 //imGui include
 #include "imgui.h"
@@ -107,6 +106,15 @@ private:
 	LARGE_INTEGER TimerFrequency;
 	LARGE_INTEGER prevTime;
 	LARGE_INTEGER currentTime;
+
+	//curtain dimesnions
+	int NumberVerticiesX = 32;
+	int NumberVerticiesY = 32;
+	int totalParticles;
+
+	//buffers for cloth
+	std::vector<Particle>particles;
+	ID3D11Buffer* pParticleBuffer = nullptr;
 
 private:
 	HRESULT CreateWindowHandle(HINSTANCE hInstance, int nCmdShow);

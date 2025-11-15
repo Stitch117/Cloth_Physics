@@ -36,16 +36,24 @@ struct ConstantBuffer
 	float HasTexture;
 };
 
-struct SimpleVertex
+struct Particle
 {
 	XMFLOAT3 Pos;
+	XMFLOAT3 PrevPos;
 	XMFLOAT3 Normal;
+	XMFLOAT3 Velocity;
+	XMFLOAT3 accumulatedForce;
+	float mass;
 	XMFLOAT2 TexC;
+};
 
-	bool operator<(const SimpleVertex other) const
-	{
-		return memcmp((void*)this, (void*)&other, sizeof(SimpleVertex)) > 0;
-	};
+struct Spring
+{
+	int ParticleIndiceA;
+	int ParticleIndiceB;
+	float springConstant;
+	float dampingConstant;
+	float restLength;
 };
 
 struct MeshData

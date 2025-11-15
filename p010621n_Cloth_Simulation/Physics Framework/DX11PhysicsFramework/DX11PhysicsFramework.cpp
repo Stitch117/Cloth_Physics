@@ -266,7 +266,7 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 
 	//get total verticies in the cloth
 	totalParticles = NumberVerticiesX * NumberVerticiesY;
-	float spacing = 0.1f;
+	float spacing = 3.0f / NumberVerticiesX;
 
 	for (int y = 0; y < NumberVerticiesY; y++)
 	{

@@ -54,7 +54,7 @@ struct VS_INPUT
 //--------------------------------------------------------------------------------------
 struct VS_OUTPUT
 {
-    float4 PosH : SV_POSITION; // REQUIRED final clip-space position
+    float4 PosH : SV_POSITION; // final clip-space position
     float3 PosW : POSITION; // world position
     float3 NormW : NORMAL; // world normal
     float3 WorldVelocity : VELOCITY;
@@ -65,13 +65,15 @@ VS_OUTPUT VS_main(VS_INPUT input)
 {
     VS_OUTPUT output;
 
+	//calculate world pos
     float4 posL = float4(input.Pos, 1.0f);
     float4 posW = mul(posL, World);
     output.PosW = posW.xyz;
 
+	//calculate clipspce pos
     float4 posH = mul(posW, View);
     posH = mul(posH, Projection);
-    output.PosH = posH; // << REQUIRED
+    output.PosH = posH; 
 
     output.NormW = normalize(mul(float4(input.Normal, 0), World).xyz);
     output.WorldVelocity = input.Velocity;

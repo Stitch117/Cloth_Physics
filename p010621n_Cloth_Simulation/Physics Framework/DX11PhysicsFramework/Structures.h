@@ -29,13 +29,11 @@ struct ConstantBuffer
 	XMMATRIX Projection;
 
 	SurfaceInfo surface;
-
 	Light light;
 
 	XMFLOAT3 EyePosW;
 	float HasTexture;
 };
-
 struct Particle
 {
 	XMFLOAT3 Pos;

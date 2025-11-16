@@ -79,6 +79,7 @@ private:
 
 	ID3D11RasterizerState* _CWcullModeFill; //Fill
 	ID3D11RasterizerState* _CWcullModeWire; //WireFrame
+	ID3D11RasterizerState* _CWcullModeNone; //No Culling
 
 	enum CurrentState 
 	{
@@ -115,6 +116,8 @@ private:
 	//buffers for cloth
 	std::vector<Particle>particles;
 	ID3D11Buffer* pParticleBuffer = nullptr;
+	std::vector<unsigned int> indices;
+	ID3D11Buffer* indexBuffer = nullptr;
 
 private:
 	HRESULT CreateWindowHandle(HINSTANCE hInstance, int nCmdShow);

@@ -160,22 +160,36 @@ HRESULT DX11PhysicsFramework::CreateSwapChainAndFrameBuffer()
 	hr = _swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&frameBuffer));
 	if (FAILED(hr)) return hr;
 
+	D3D11_TEXTURE2D_DESC depthBufferDesc;
+	frameBuffer->GetDesc(&depthBufferDesc);
+
 	D3D11_RENDER_TARGET_VIEW_DESC framebufferDesc = {};
 	framebufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB; //sRGB render target enables hardware gamma correction
 	framebufferDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 
 	hr = _device->CreateRenderTargetView(frameBuffer, &framebufferDesc, &_frameBufferView);
-
+	if (FAILED(hr))
+	{
+		frameBuffer->Release();
+		return hr;
+	}
+	
 	frameBuffer->Release();
-
-	D3D11_TEXTURE2D_DESC depthBufferDesc;
-	frameBuffer->GetDesc(&depthBufferDesc); // copy from framebuffer properties
 
 	depthBufferDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
 	depthBufferDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
 
-	_device->CreateTexture2D(&depthBufferDesc, nullptr, &_depthStencilBuffer);
-	_device->CreateDepthStencilView(_depthStencilBuffer, nullptr, &_depthBufferView);
+	hr = _device->CreateTexture2D(&depthBufferDesc, nullptr, &_depthStencilBuffer);
+	if (FAILED(hr))
+	{
+		return hr;
+	}
+
+	hr = _device->CreateDepthStencilView(_depthStencilBuffer, nullptr, &_depthBufferView);
+	if (FAILED(hr))
+	{
+		return hr;
+	}
 
 	return hr;
 }
@@ -227,9 +241,6 @@ HRESULT DX11PhysicsFramework::InitShadersAndInputLayout()
 
 	// Create the pixel shader
 	hr = _device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &_pixelShader);
-
-    if (FAILED(hr))
-        return hr;
 	
     // Define the input layout
     D3D11_INPUT_ELEMENT_DESC inputElementDesc[] =
@@ -244,7 +255,7 @@ HRESULT DX11PhysicsFramework::InitShadersAndInputLayout()
 	};
 
     // Create the input layout
-	hr = _device->CreateInputLayout(inputElementDesc, ARRAYSIZE(inputElementDesc), vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), &_inputLayout);
+	_device->CreateInputLayout(inputElementDesc, ARRAYSIZE(inputElementDesc), vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), &_inputLayout);
 
 	if (FAILED(hr))
 		return hr;
@@ -276,25 +287,60 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 			p.Pos.x = (x - NumberVerticiesX / 2.0f) * spacing;
 			p.Pos.y = (y - NumberVerticiesY / 2.0f) * spacing;
 			p.Pos.z = 0.0f; //flat cloth on XY plane
-			p.Normal = XMFLOAT3(0, 0, -1);
+			p.Normal = XMFLOAT3(0, 0, 1);
+			p.TexC.x = (float)x / (NumberVerticiesX - 1);
+			p.TexC.y = (float)y / (NumberVerticiesY - 1);
 			particles.push_back(p);
 		}
 	}
 
-	//deifne a buffer for the cloth
+	//deifne a vertex buffer for the cloth
 	D3D11_BUFFER_DESC bufferDesc = {};
-	bufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	bufferDesc.Usage = D3D11_USAGE_DYNAMIC;
 	bufferDesc.ByteWidth = sizeof(Particle) * particles.size();
 	bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-	bufferDesc.CPUAccessFlags = 0;
-	bufferDesc.MiscFlags = 0;
+	bufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
 	D3D11_SUBRESOURCE_DATA vertexData = {};
 	vertexData.pSysMem = particles.data();
 
 	hr = _device->CreateBuffer(&bufferDesc, &vertexData, &pParticleBuffer); 
 
+	if (FAILED(hr))
+		return hr;
+
 	//define index buffer
+	for (int y = 0; y < NumberVerticiesY - 1; y++)
+	{
+		for (int x = 0; x < NumberVerticiesX - 1; x++)
+		{
+			//define four points of a quad
+			int p0 = y * NumberVerticiesX + x;
+			int p1 = y * NumberVerticiesX + (x + 1);
+			int p2 = (y + 1) * NumberVerticiesX + x;
+			int p3 = (y + 1) * NumberVerticiesX + (x + 1);
+
+			// Triangle 1
+			indices.push_back(p0);
+			indices.push_back(p2);
+			indices.push_back(p1);
+
+			// Triangle 2
+			indices.push_back(p2);
+			indices.push_back(p3);
+			indices.push_back(p1);
+		}
+	}
+
+	D3D11_BUFFER_DESC ibDesc = {}; 
+	ibDesc.Usage = D3D11_USAGE_DEFAULT; 
+	ibDesc.ByteWidth = sizeof(unsigned int) * indices.size(); 
+	ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER; 
+
+	D3D11_SUBRESOURCE_DATA initData = {}; 
+	initData.pSysMem = indices.data(); 
+
+	hr = _device->CreateBuffer(&ibDesc, &initData, &indexBuffer);  
 
 	if (FAILED(hr))
 		return hr;
@@ -326,7 +372,15 @@ HRESULT DX11PhysicsFramework::InitPipelineStates()
 
 	hr = _device->CreateRasterizerState(&cmdesc2, &_CWcullModeWire);
 
-	_immediateContext->RSSetState(_CWcullModeWire);
+	//None Rasterizer
+	D3D11_RASTERIZER_DESC cmdesc3;
+	ZeroMemory(&cmdesc3, sizeof(D3D11_RASTERIZER_DESC));
+	cmdesc3.FillMode = D3D11_FILL_SOLID;
+	cmdesc3.CullMode = D3D11_CULL_NONE;
+
+	hr = _device->CreateRasterizerState(&cmdesc3, &_CWcullModeNone);
+
+	_immediateContext->RSSetState(_CWcullModeFill);
 
 	D3D11_DEPTH_STENCIL_DESC dssDesc;
 	ZeroMemory(&dssDesc, sizeof(D3D11_DEPTH_STENCIL_DESC));
@@ -556,6 +610,7 @@ void DX11PhysicsFramework::Draw()
 	ImGui_ImplWin32_NewFrame(); 
 	ImGui::NewFrame(); 
 
+
     //
     // Clear buffers
     //
@@ -580,6 +635,8 @@ void DX11PhysicsFramework::Draw()
 
 	XMMATRIX view = XMLoadFloat4x4(&tempView);
 	XMMATRIX projection = XMLoadFloat4x4(&tempProjection);
+	
+	_cbData.World = XMMatrixTranspose(XMMatrixIdentity());
 
 	_cbData.View = XMMatrixTranspose(view);
 	_cbData.Projection = XMMatrixTranspose(projection);
@@ -587,9 +644,10 @@ void DX11PhysicsFramework::Draw()
 	_cbData.light = basicLight;
 	_cbData.EyePosW = _camera->GetPosition();
 
-	_cbData.World = XMMatrixTranspose(XMMatrixIdentity());
-
 	//draw cloth
+	_cbData.HasTexture = 1.0f;
+	_immediateContext->PSSetShaderResources(0, 1, &_StoneTextureRV);
+
 	D3D11_MAPPED_SUBRESOURCE mapped = {};
 	HRESULT hr = _immediateContext->Map(_constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
 	if (SUCCEEDED(hr))
@@ -598,13 +656,13 @@ void DX11PhysicsFramework::Draw()
 		_immediateContext->Unmap(_constantBuffer, 0);
 	}
 
-
-
 	UINT stride = sizeof(Particle);
 	UINT offset = 0;
 	_immediateContext->IASetVertexBuffers(0, 1, &pParticleBuffer, &stride, &offset);
-	_immediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
-	_immediateContext->Draw(particles.size(), 0);
+	_immediateContext->IASetIndexBuffer(indexBuffer, DXGI_FORMAT_R32_UINT, 0); 
+
+	_immediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST); 
+	_immediateContext->DrawIndexed(static_cast<UINT>(indices.size()), 0, 0);
 
 
 	//imGui menues
@@ -648,6 +706,64 @@ void DX11PhysicsFramework::Draw()
 	{
 		_immediateContext->RSSetState(_CWcullModeFill);
 		CurrentStateInt = FILL;
+	}
+	ImGui::EndChild();
+	ImGui::End();
+
+
+	ImGui::Begin("Vertex Count Buttons");
+
+	// Display contents in a scrolling region
+	//verticies buttons
+	ImGui::TextColored(ImVec4(1, 1, 1, 1), "Click to change the amount  of verticies");
+	ImGui::BeginChild("verticies buttons");
+	if (ImGui::Button("1024 (32 X 32)" , ImVec2(150, 40)))
+	{
+		NumberVerticiesX = 32;
+		NumberVerticiesY = 32;
+		particles.clear();
+		indices.clear();
+		InitVertexIndexBuffers();
+	}
+	if (ImGui::Button("2048 (64 X 32)", ImVec2(150, 40)))
+	{
+		NumberVerticiesX = 64;
+		NumberVerticiesY = 32;
+		particles.clear();
+		indices.clear();
+		InitVertexIndexBuffers();
+	}
+	if (ImGui::Button("4096 (64 X 64)", ImVec2(150, 40)))
+	{
+		NumberVerticiesX = 64;
+		NumberVerticiesY = 64;
+		particles.clear();
+		indices.clear();
+		InitVertexIndexBuffers();
+	}
+	if (ImGui::Button("16,384 (128 X 128)", ImVec2(150, 40)))
+	{
+		NumberVerticiesX = 128;
+		NumberVerticiesY = 128;
+		particles.clear();
+		indices.clear();
+		InitVertexIndexBuffers();
+	}
+	if (ImGui::Button("32,768 (256 X 128)", ImVec2(150, 40)))
+	{
+		NumberVerticiesX = 256;
+		NumberVerticiesY = 128;
+		particles.clear();
+		indices.clear();
+		InitVertexIndexBuffers();
+	}
+	if (ImGui::Button("65,536 (256 X 256)", ImVec2(150, 40)))
+	{
+		NumberVerticiesX = 256;
+		NumberVerticiesY = 256;
+		particles.clear();
+		indices.clear();
+		InitVertexIndexBuffers();
 	}
 	ImGui::EndChild();
 	ImGui::End();

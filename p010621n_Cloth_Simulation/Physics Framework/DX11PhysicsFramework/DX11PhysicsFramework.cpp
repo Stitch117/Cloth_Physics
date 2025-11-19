@@ -278,7 +278,9 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 	//get total verticies in the cloth
 	totalParticles = NumberVerticiesX * NumberVerticiesY;
 	float spacing = 3.0f / NumberVerticiesX;
+	int tempindex = 0;
 
+	//define all particles first so spring checks can work
 	for (int y = 0; y < NumberVerticiesY; y++)
 	{
 		for (int x = 0; x < NumberVerticiesX; x++)
@@ -293,6 +295,117 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 			particles.push_back(p);
 		}
 	}
+
+	//make springs
+	for (int y = 0; y < NumberVerticiesY; y++)
+	{
+		for (int x = 0; x < NumberVerticiesX; x++)
+		{
+			//horizontal adjacent structure spring
+			if ((tempindex + 1) % NumberVerticiesX != 0)
+			{
+				Spring s;
+				s.ParticleIndiceA = tempindex;
+				s.ParticleIndiceB = tempindex + 1;
+				s.springConstant = structuralSpringConst;
+
+				//pythagorous for base length
+				s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
+					((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
+					((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
+
+				clothSprings.push_back(s);
+			}
+
+			//verticle adjacent structure spring
+			if (tempindex + NumberVerticiesX < totalParticles)
+			{
+				Spring s;
+				s.ParticleIndiceA = tempindex;
+				s.ParticleIndiceB = tempindex + NumberVerticiesX;
+				s.springConstant = structuralSpringConst;
+
+				//pythagorous for base length
+				s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
+					((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
+					((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
+
+				clothSprings.push_back(s);
+			}
+
+			//diagonal shear springs
+			if ((tempindex + 1) % NumberVerticiesX != 0)
+			{
+				//diagonal down right
+				if (tempindex + 1 + NumberVerticiesX < totalParticles)
+				{
+					Spring s;
+					s.ParticleIndiceA = tempindex;
+					s.ParticleIndiceB = tempindex + 1 + NumberVerticiesX;
+					s.springConstant = shearSpringConst;
+
+					//pythagorous for base length
+					s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
+						((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
+						((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
+
+					clothSprings.push_back(s);
+				}
+
+				//digonal up right
+				if (tempindex + 1 - NumberVerticiesX > 0)
+				{
+					Spring s;
+					s.ParticleIndiceA = tempindex;
+					s.ParticleIndiceB = tempindex + 1 - NumberVerticiesX;
+					s.springConstant = shearSpringConst;
+
+					//pythagorous for base length
+					s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
+						((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
+						((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
+
+					clothSprings.push_back(s);
+				}
+			}
+
+			//neighbours neighbour spring horizontal
+			if ((tempindex + 2) % NumberVerticiesX != 0 && (tempindex + 2) % NumberVerticiesX != 1)
+			{
+				Spring s;
+				s.ParticleIndiceA = tempindex;
+				s.ParticleIndiceB = tempindex + 2;
+				s.springConstant = bendSpringConst;
+
+				//pythagorous for base length
+				s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
+					((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
+					((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
+
+				clothSprings.push_back(s);
+			}
+
+			//neighbours neighbour spring vertical
+			if ((tempindex + NumberVerticiesX + NumberVerticiesX) < totalParticles)
+			{
+				Spring s;
+				s.ParticleIndiceA = tempindex;
+				s.ParticleIndiceB = tempindex + NumberVerticiesX + NumberVerticiesX;
+				s.springConstant = bendSpringConst;
+
+				//pythagorous for base length
+				s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
+					((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
+					((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
+
+				clothSprings.push_back(s);
+			}
+
+
+			tempindex++;
+		}
+	}
+
 
 	//deifne a vertex buffer for the cloth
 	D3D11_BUFFER_DESC bufferDesc = {};

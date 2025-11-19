@@ -119,6 +119,12 @@ private:
 	std::vector<unsigned int> indices;
 	ID3D11Buffer* indexBuffer = nullptr;
 
+	//spring vector
+	std::vector<Spring> clothSprings;
+	const float structuralSpringConst = 7500;
+	float shearSpringConst = structuralSpringConst * 0.7;
+	float bendSpringConst = structuralSpringConst * 0.05;
+
 private:
 	HRESULT CreateWindowHandle(HINSTANCE hInstance, int nCmdShow);
 	HRESULT CreateD3DDevice();

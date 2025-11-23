@@ -1,4 +1,4 @@
-#include "DX11PhysicsFramework.h"
+﻿#include "DX11PhysicsFramework.h"
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -289,7 +289,10 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 			p.Pos.x = (x - NumberVerticiesX / 2.0f) * spacing;
 			p.Pos.y = (y - NumberVerticiesY / 2.0f) * spacing;
 			p.Pos.z = 0.0f; //flat cloth on XY plane
+			p.PrevPos = p.Pos;
 			p.Normal = XMFLOAT3(0, 0, 1);
+			p.accumulatedForce = XMFLOAT3(0.0f, 0.0f, 0.0f);
+			p.Velocity = XMFLOAT3(0.0f, 0.0f, 0.0f);
 			p.TexC.x = (float)x / (NumberVerticiesX - 1);
 			p.TexC.y = (float)y / (NumberVerticiesY - 1);
 			particles.push_back(p);
@@ -313,6 +316,7 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 				s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
 					((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
 					((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
+				s.dampingConstant = 0.98;
 
 				clothSprings.push_back(s);
 			}
@@ -329,6 +333,7 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 				s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
 					((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
 					((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
+				s.dampingConstant = 0.98;
 
 				clothSprings.push_back(s);
 			}
@@ -348,6 +353,7 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 					s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
 						((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
 						((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
+					s.dampingConstant = 0.98;
 
 					clothSprings.push_back(s);
 				}
@@ -364,6 +370,7 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 					s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
 						((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
 						((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
+					s.dampingConstant = 0.98;
 
 					clothSprings.push_back(s);
 				}
@@ -381,6 +388,7 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 				s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
 					((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
 					((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
+				s.dampingConstant = 0.98;
 
 				clothSprings.push_back(s);
 			}
@@ -397,6 +405,7 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 				s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
 					((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
 					((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
+				s.dampingConstant = 0.98;
 
 				clothSprings.push_back(s);
 			}
@@ -620,6 +629,106 @@ DX11PhysicsFramework::~DX11PhysicsFramework()
 	ImGui::DestroyContext(); 
 }
 
+void DX11PhysicsFramework::ClothUpdate(float deltaTime)
+{
+	// Update cloth
+	for (Spring spring : clothSprings)
+	{
+		// current vector from A → B
+		float dx = particles[spring.ParticleIndiceB].Pos.x - particles[spring.ParticleIndiceA].Pos.x;
+		float dy = particles[spring.ParticleIndiceB].Pos.y - particles[spring.ParticleIndiceA].Pos.y;
+		float dz = particles[spring.ParticleIndiceB].Pos.z - particles[spring.ParticleIndiceA].Pos.z;
+
+		// current length
+		float currentLength = sqrt(dx * dx + dy * dy + dz * dz);
+		if (currentLength == 0.0f) currentLength = 0.00001f; // prevent division by zero
+
+		// unit direction vector
+		float ux = dx / currentLength;
+		float uy = dy / currentLength;
+		float uz = dz / currentLength;
+
+		// Hooke’s Law (spring force)
+		float extension = currentLength - spring.restLength;
+		float fSpring = -spring.springConstant * extension;
+
+		// relative spring velocity 
+		float vax = particles[spring.ParticleIndiceA].Velocity.x;
+		float vay = particles[spring.ParticleIndiceA].Velocity.y;
+		float vaz = particles[spring.ParticleIndiceA].Velocity.z;
+
+		float vbx = particles[spring.ParticleIndiceB].Velocity.x;
+		float vby = particles[spring.ParticleIndiceB].Velocity.y;
+		float vbz = particles[spring.ParticleIndiceB].Velocity.z;
+
+		// relative velocity B–A
+		float rvx = vbx - vax;
+		float rvy = vby - vay;
+		float rvz = vbz - vaz;
+
+		// projection of relative velocity onto each direction
+		float relVelAlongSpring =
+			rvx * ux +
+			rvy * uy +
+			rvz * uz;
+
+		// damping force
+		float fDamp = -spring.dampingConstant * relVelAlongSpring;
+
+		// total scalar force magnitude
+		float fTotal = fSpring + fDamp;
+
+		// convert scalar to vector force
+		float fx = fTotal * ux;
+		float fy = fTotal * uy;
+		float fz = fTotal * uz;
+
+		// apply forces
+		particles[spring.ParticleIndiceA].accumulatedForce.x -= fx;
+		particles[spring.ParticleIndiceA].accumulatedForce.y -= fy;
+		particles[spring.ParticleIndiceA].accumulatedForce.z -= fz;
+
+		particles[spring.ParticleIndiceB].accumulatedForce.x += fx;
+		particles[spring.ParticleIndiceB].accumulatedForce.y += fy;
+		particles[spring.ParticleIndiceB].accumulatedForce.z += fz;
+
+	}
+
+	//update particels position
+	for (Particle& particle : particles)
+	{
+		particle.PrevPos = particle.Pos;
+
+		particle.accumulatedForce.y += GRAVITYFORCE;
+
+		particle.Velocity.x += particle.accumulatedForce.x * deltaTime;
+		particle.Velocity.y += particle.accumulatedForce.y * deltaTime;
+		particle.Velocity.z += particle.accumulatedForce.z * deltaTime;
+
+		if (particle.Pos.y <= -2.0f)
+		{
+			particle.Velocity.y = 0.0f;
+		}
+
+		particle.Pos.x += particle.Velocity.x * deltaTime;
+		particle.Pos.y += particle.Velocity.y * deltaTime;
+		particle.Pos.z += particle.Velocity.z * deltaTime;
+
+		particle.accumulatedForce = { 0,0,0 };
+	}
+
+	//pin the top row verticies every 4 verticies
+	for (int x = totalParticles - 1; x > totalParticles - 1 - NumberVerticiesX; x--)
+	{
+		if (x % 4 == 0)
+		{
+			particles[x].Pos = particles[x].PrevPos; // lock in place
+			particles[x].Velocity = { 0,0,0 };
+		}
+	}
+
+}
+
 void DX11PhysicsFramework::Update()
 {
 	static auto last = chrono::steady_clock::now();
@@ -634,13 +743,8 @@ void DX11PhysicsFramework::Update()
 	{
 		_camera->Update();
 
-		// Update objects
-		for (auto gameObject : _gameObjects)
-		{
-			gameObject->Update(deltaTime);
-		}
-
-
+		ClothUpdate(deltaTime);
+		
 		FPSAverageNums[FPSAverageIndex] = 1.0f / deltaTime;
 		FPSAverageIndex++;
 
@@ -658,11 +762,7 @@ void DX11PhysicsFramework::Update()
 		{
 			_camera->Update();
 
-			// Update objects
-			for (auto gameObject : _gameObjects)
-			{
-				gameObject->Update(deltaTime);
-			}
+			ClothUpdate(deltaTime); 
 
 			FPSAverageNums[FPSAverageIndex] = 1.0f / accumulator;
 			FPSAverageIndex++;
@@ -683,11 +783,7 @@ void DX11PhysicsFramework::Update()
 		{
 			_camera->Update();
 
-			// Update objects
-			for (auto gameObject : _gameObjects)
-			{
-				gameObject->Update(deltaTime);
-			}
+			ClothUpdate(deltaTime); 
 
 			FPSAverageNums[FPSAverageIndex] = 1.0f / accumulator;
 			FPSAverageIndex++;
@@ -709,6 +805,22 @@ void DX11PhysicsFramework::Update()
 	for (int i = 0; i < FPSAverageNums.size(); i++)
 	{
 		tempFpsTotal += FPSAverageNums[i];
+	}
+
+
+	//remap updated frame
+	D3D11_MAPPED_SUBRESOURCE mapped;
+	_immediateContext->Map(pParticleBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+	memcpy(mapped.pData, particles.data(), sizeof(Particle)* particles.size());
+	_immediateContext->Unmap(pParticleBuffer, 0);
+
+	if (ClothresizeCheck)
+	{
+		particles.clear();
+		indices.clear();
+		clothSprings.clear();
+		InitVertexIndexBuffers();
+		ClothresizeCheck = false;
 	}
 
 	CurrentFPS = tempFpsTotal / FPSAverageNums.size();
@@ -834,49 +946,37 @@ void DX11PhysicsFramework::Draw()
 	{
 		NumberVerticiesX = 32;
 		NumberVerticiesY = 32;
-		particles.clear();
-		indices.clear();
-		InitVertexIndexBuffers();
+		ClothresizeCheck = true;
 	}
 	if (ImGui::Button("2048 (64 X 32)", ImVec2(150, 40)))
 	{
 		NumberVerticiesX = 64;
 		NumberVerticiesY = 32;
-		particles.clear();
-		indices.clear();
-		InitVertexIndexBuffers();
+		ClothresizeCheck = true;
 	}
 	if (ImGui::Button("4096 (64 X 64)", ImVec2(150, 40)))
 	{
 		NumberVerticiesX = 64;
 		NumberVerticiesY = 64;
-		particles.clear();
-		indices.clear();
-		InitVertexIndexBuffers();
+		ClothresizeCheck = true;
 	}
 	if (ImGui::Button("16,384 (128 X 128)", ImVec2(150, 40)))
 	{
 		NumberVerticiesX = 128;
 		NumberVerticiesY = 128;
-		particles.clear();
-		indices.clear();
-		InitVertexIndexBuffers();
+		ClothresizeCheck = true;
 	}
 	if (ImGui::Button("32,768 (256 X 128)", ImVec2(150, 40)))
 	{
 		NumberVerticiesX = 256;
 		NumberVerticiesY = 128;
-		particles.clear();
-		indices.clear();
-		InitVertexIndexBuffers();
+		ClothresizeCheck = true;
 	}
 	if (ImGui::Button("65,536 (256 X 256)", ImVec2(150, 40)))
 	{
 		NumberVerticiesX = 256;
 		NumberVerticiesY = 256;
-		particles.clear();
-		indices.clear();
-		InitVertexIndexBuffers();
+		ClothresizeCheck = true;
 	}
 	ImGui::EndChild();
 	ImGui::End();

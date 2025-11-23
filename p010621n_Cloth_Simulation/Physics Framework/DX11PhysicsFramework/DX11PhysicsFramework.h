@@ -21,6 +21,7 @@
 #include "GameObject.h"
 #define FPS60 1.0f/60.0f 
 #define FPS120 1.0f/120.0f 
+#define GRAVITYFORCE -9.8f
 
 using namespace DirectX;
 
@@ -125,6 +126,9 @@ private:
 	float shearSpringConst = structuralSpringConst * 0.7;
 	float bendSpringConst = structuralSpringConst * 0.05;
 
+	//check for cloth resize
+	bool ClothresizeCheck = false;
+
 private:
 	HRESULT CreateWindowHandle(HINSTANCE hInstance, int nCmdShow);
 	HRESULT CreateD3DDevice();
@@ -140,6 +144,7 @@ public:
 	HRESULT Initialise(HINSTANCE hInstance, int nCmdShow);
 
 	bool HandleKeyboard(MSG msg);
+	void ClothUpdate(float deltaTime);
 	void Update();
 	void Draw();
 };

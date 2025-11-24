@@ -293,6 +293,7 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 			p.Normal = XMFLOAT3(0, 0, 1);
 			p.accumulatedForce = XMFLOAT3(0.0f, 0.0f, 0.0f);
 			p.Velocity = XMFLOAT3(0.0f, 0.0f, 0.0f);
+			p.mass = 0.25f;
 			p.TexC.x = (float)x / (NumberVerticiesX - 1);
 			p.TexC.y = (float)y / (NumberVerticiesY - 1);
 			particles.push_back(p);
@@ -683,14 +684,15 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 		float fy = fTotal * uy;
 		float fz = fTotal * uz;
 
-		// apply forces
-		particles[spring.ParticleIndiceA].accumulatedForce.x -= fx;
-		particles[spring.ParticleIndiceA].accumulatedForce.y -= fy;
-		particles[spring.ParticleIndiceA].accumulatedForce.z -= fz;
 
-		particles[spring.ParticleIndiceB].accumulatedForce.x += fx;
-		particles[spring.ParticleIndiceB].accumulatedForce.y += fy;
-		particles[spring.ParticleIndiceB].accumulatedForce.z += fz;
+		// apply forces
+		particles[spring.ParticleIndiceA].accumulatedForce.x -= fx * particles[spring.ParticleIndiceA].mass;
+		particles[spring.ParticleIndiceA].accumulatedForce.y -= fy * particles[spring.ParticleIndiceA].mass;
+		particles[spring.ParticleIndiceA].accumulatedForce.z -= fz * particles[spring.ParticleIndiceA].mass;
+
+		particles[spring.ParticleIndiceB].accumulatedForce.x += fx * particles[spring.ParticleIndiceB].mass;
+		particles[spring.ParticleIndiceB].accumulatedForce.y += fy * particles[spring.ParticleIndiceB].mass;
+		particles[spring.ParticleIndiceB].accumulatedForce.z += fz * particles[spring.ParticleIndiceB].mass;
 
 	}
 
@@ -699,16 +701,11 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 	{
 		particle.PrevPos = particle.Pos;
 
-		particle.accumulatedForce.y += GRAVITYFORCE;
+		particle.accumulatedForce.y += GRAVITYFORCE * particle.mass;
 
 		particle.Velocity.x += particle.accumulatedForce.x * deltaTime;
 		particle.Velocity.y += particle.accumulatedForce.y * deltaTime;
 		particle.Velocity.z += particle.accumulatedForce.z * deltaTime;
-
-		if (particle.Pos.y <= -2.0f)
-		{
-			particle.Velocity.y = 0.0f;
-		}
 
 		particle.Pos.x += particle.Velocity.x * deltaTime;
 		particle.Pos.y += particle.Velocity.y * deltaTime;
@@ -762,7 +759,7 @@ void DX11PhysicsFramework::Update()
 		{
 			_camera->Update();
 
-			ClothUpdate(deltaTime); 
+			ClothUpdate(accumulator);
 
 			FPSAverageNums[FPSAverageIndex] = 1.0f / accumulator;
 			FPSAverageIndex++;
@@ -783,7 +780,7 @@ void DX11PhysicsFramework::Update()
 		{
 			_camera->Update();
 
-			ClothUpdate(deltaTime); 
+			ClothUpdate(accumulator);
 
 			FPSAverageNums[FPSAverageIndex] = 1.0f / accumulator;
 			FPSAverageIndex++;

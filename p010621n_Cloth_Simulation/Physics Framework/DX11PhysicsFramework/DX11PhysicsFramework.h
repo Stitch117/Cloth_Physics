@@ -122,9 +122,9 @@ private:
 
 	//spring vector
 	std::vector<Spring> clothSprings;
-	const float structuralSpringConst = 7500;
-	float shearSpringConst = structuralSpringConst * 0.7;
-	float bendSpringConst = structuralSpringConst * 0.05;
+	const float structuralSpringConst = 9000;
+	float shearSpringConst = structuralSpringConst * 0.75;
+	float bendSpringConst = structuralSpringConst * 0.1;
 
 	//check for cloth resize
 	bool ClothresizeCheck = false;

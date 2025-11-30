@@ -43,6 +43,7 @@ struct Particle
 	XMFLOAT3 accumulatedForce;
 	float mass;
 	XMFLOAT2 TexC;
+	boolean IsPinned;
 };
 
 struct Spring

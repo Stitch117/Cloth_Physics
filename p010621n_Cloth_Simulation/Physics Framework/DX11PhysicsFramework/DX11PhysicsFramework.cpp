@@ -252,6 +252,7 @@ HRESULT DX11PhysicsFramework::InitShadersAndInputLayout()
 		{ "ACCUMULATEDFORCE",  0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 48,  D3D11_INPUT_PER_VERTEX_DATA, 0 }, // accumulatedForce
 		{ "MASS",  0, DXGI_FORMAT_R32_FLOAT,       0, 60,  D3D11_INPUT_PER_VERTEX_DATA, 0 },			 // mass
 		{ "TEXCOORD",  0, DXGI_FORMAT_R32G32_FLOAT,    0, 64,  D3D11_INPUT_PER_VERTEX_DATA, 0 },		 // TexCoord
+		{ "IsPinned", 0, DXGI_FORMAT_R32_UINT, 0, 72, D3D11_INPUT_PER_VERTEX_DATA, 0 }					 // IsPinned
 	};
 
     // Create the input layout
@@ -287,7 +288,7 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 		{
 			Particle p;
 			p.Pos.x = (x - NumberVerticiesX / 2.0f) * spacing;
-			p.Pos.y = (y - NumberVerticiesY / 2.0f) * spacing;
+			p.Pos.y = (y - NumberVerticiesY / 2.0f) * spacing + 0.5f;
 			p.Pos.z = 0.0f; //flat cloth on XY plane
 			p.PrevPos = p.Pos;
 			p.Normal = XMFLOAT3(0, 0, 1);
@@ -296,7 +297,26 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 			p.mass = 0.25f;
 			p.TexC.x = (float)x / (NumberVerticiesX - 1);
 			p.TexC.y = (float)y / (NumberVerticiesY - 1);
+			p.IsPinned = false;
 			particles.push_back(p);
+		}
+	}
+
+	int topRowStart = totalParticles - NumberVerticiesX; // index of top-left
+	int topRowEnd = totalParticles - 1;                 // index of top-right
+
+	// Always pin the top-left and top-right
+	particles[topRowStart].IsPinned = true;
+	particles[topRowEnd].IsPinned = true;
+
+	// Pin every 8th particle in between
+	for (int col = 1; col < NumberVerticiesX - 1; col++) // skip edges
+	{
+		int idx = topRowStart + col;
+
+		if (col % 8 == 0)
+		{
+			particles[idx].IsPinned = true;
 		}
 	}
 
@@ -317,7 +337,13 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 				s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
 					((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
 					((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
-				s.dampingConstant = 0.98;
+				
+				// find reduced mass for spring damper
+				float mA = particles[s.ParticleIndiceA].mass;
+				float mB = particles[s.ParticleIndiceB].mass;
+				float reducedMass = (mA * mB) / (mA + mB); // safe because both masses > 0
+
+				s.dampingConstant = 2.0f * sqrtf(s.springConstant * reducedMass);
 
 				clothSprings.push_back(s);
 			}
@@ -334,7 +360,13 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 				s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
 					((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
 					((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
-				s.dampingConstant = 0.98;
+				
+				// find reduced mass for spring damper
+				float mA = particles[s.ParticleIndiceA].mass;
+				float mB = particles[s.ParticleIndiceB].mass;
+				float reducedMass = (mA * mB) / (mA + mB); // safe because both masses > 0
+
+				s.dampingConstant = 2.0f * sqrtf(s.springConstant * reducedMass);
 
 				clothSprings.push_back(s);
 			}
@@ -354,13 +386,19 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 					s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
 						((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
 						((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
-					s.dampingConstant = 0.98;
+					
+					// find reduced mass for spring damper
+					float mA = particles[s.ParticleIndiceA].mass;
+					float mB = particles[s.ParticleIndiceB].mass;
+					float reducedMass = (mA * mB) / (mA + mB); // safe because both masses > 0
+
+					s.dampingConstant = 2.0f * sqrtf(s.springConstant * reducedMass);
 
 					clothSprings.push_back(s);
 				}
 
 				//digonal up right
-				if (tempindex + 1 - NumberVerticiesX > 0)
+				if (tempindex + 1 - NumberVerticiesX >= 0)
 				{
 					Spring s;
 					s.ParticleIndiceA = tempindex;
@@ -371,7 +409,13 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 					s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
 						((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
 						((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
-					s.dampingConstant = 0.98;
+					
+					// find reduced mass for spring damper
+					float mA = particles[s.ParticleIndiceA].mass;
+					float mB = particles[s.ParticleIndiceB].mass;
+					float reducedMass = (mA * mB) / (mA + mB); // safe because both masses > 0
+
+					s.dampingConstant = 2.0f * sqrtf(s.springConstant * reducedMass);
 
 					clothSprings.push_back(s);
 				}
@@ -389,7 +433,13 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 				s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
 					((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
 					((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
-				s.dampingConstant = 0.98;
+				
+				// find reduced mass for spring damper
+				float mA = particles[s.ParticleIndiceA].mass;
+				float mB = particles[s.ParticleIndiceB].mass;
+				float reducedMass = (mA * mB) / (mA + mB); // safe because both masses > 0
+
+				s.dampingConstant = 2.0f * sqrtf(s.springConstant * reducedMass);
 
 				clothSprings.push_back(s);
 			}
@@ -406,7 +456,13 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 				s.restLength = sqrt(((particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x) * (particles[s.ParticleIndiceA].Pos.x - particles[s.ParticleIndiceB].Pos.x)) +
 					((particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y) * (particles[s.ParticleIndiceA].Pos.y - particles[s.ParticleIndiceB].Pos.y)) +
 					((particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z) * (particles[s.ParticleIndiceA].Pos.z - particles[s.ParticleIndiceB].Pos.z)));
-				s.dampingConstant = 0.98;
+				
+				// find reduced mass for spring damper
+				float mA = particles[s.ParticleIndiceA].mass;
+				float mB = particles[s.ParticleIndiceB].mass;
+				float reducedMass = (mA * mB) / (mA + mB); // safe because both masses > 0
+
+				s.dampingConstant = 2.0f * sqrtf(s.springConstant * reducedMass);
 
 				clothSprings.push_back(s);
 			}
@@ -632,98 +688,135 @@ DX11PhysicsFramework::~DX11PhysicsFramework()
 
 void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 {
-	// Update cloth
-	for (Spring spring : clothSprings)
-	{
-		// current vector from A → B
-		float dx = particles[spring.ParticleIndiceB].Pos.x - particles[spring.ParticleIndiceA].Pos.x;
-		float dy = particles[spring.ParticleIndiceB].Pos.y - particles[spring.ParticleIndiceA].Pos.y;
-		float dz = particles[spring.ParticleIndiceB].Pos.z - particles[spring.ParticleIndiceA].Pos.z;
+	const int constraintIterations = 10; //stability loop count for positional constraints
+	const float maxStretchLimit = 1.2f; // max multiplier of rest length
 
-		// current length
-		float currentLength = sqrt(dx * dx + dy * dy + dz * dz);
-		if (currentLength == 0.0f) currentLength = 0.00001f; // prevent division by zero
-
-		// unit direction vector
-		float ux = dx / currentLength;
-		float uy = dy / currentLength;
-		float uz = dz / currentLength;
-
-		// Hooke’s Law (spring force)
-		float extension = currentLength - spring.restLength;
-		float fSpring = -spring.springConstant * extension;
-
-		// relative spring velocity 
-		float vax = particles[spring.ParticleIndiceA].Velocity.x;
-		float vay = particles[spring.ParticleIndiceA].Velocity.y;
-		float vaz = particles[spring.ParticleIndiceA].Velocity.z;
-
-		float vbx = particles[spring.ParticleIndiceB].Velocity.x;
-		float vby = particles[spring.ParticleIndiceB].Velocity.y;
-		float vbz = particles[spring.ParticleIndiceB].Velocity.z;
-
-		// relative velocity B–A
-		float rvx = vbx - vax;
-		float rvy = vby - vay;
-		float rvz = vbz - vaz;
-
-		// projection of relative velocity onto each direction
-		float relVelAlongSpring =
-			rvx * ux +
-			rvy * uy +
-			rvz * uz;
-
-		// damping force
-		float fDamp = -spring.dampingConstant * relVelAlongSpring;
-
-		// total scalar force magnitude
-		float fTotal = fSpring + fDamp;
-
-		// convert scalar to vector force
-		float fx = fTotal * ux;
-		float fy = fTotal * uy;
-		float fz = fTotal * uz;
-
-
-		// apply forces
-		particles[spring.ParticleIndiceA].accumulatedForce.x -= fx * particles[spring.ParticleIndiceA].mass;
-		particles[spring.ParticleIndiceA].accumulatedForce.y -= fy * particles[spring.ParticleIndiceA].mass;
-		particles[spring.ParticleIndiceA].accumulatedForce.z -= fz * particles[spring.ParticleIndiceA].mass;
-
-		particles[spring.ParticleIndiceB].accumulatedForce.x += fx * particles[spring.ParticleIndiceB].mass;
-		particles[spring.ParticleIndiceB].accumulatedForce.y += fy * particles[spring.ParticleIndiceB].mass;
-		particles[spring.ParticleIndiceB].accumulatedForce.z += fz * particles[spring.ParticleIndiceB].mass;
-
-	}
-
-	//update particels position
+	// Apply gravity and velocity update (semi-implicit Euler)
 	for (Particle& particle : particles)
 	{
+		if (!particle.IsPinned)
+		{
+			particle.Velocity.y += GRAVITYFORCE * deltaTime;
+		}
+
+		// Integrate velocity to position
 		particle.PrevPos = particle.Pos;
-
-		particle.accumulatedForce.y += GRAVITYFORCE * particle.mass;
-
-		particle.Velocity.x += particle.accumulatedForce.x * deltaTime;
-		particle.Velocity.y += particle.accumulatedForce.y * deltaTime;
-		particle.Velocity.z += particle.accumulatedForce.z * deltaTime;
-
 		particle.Pos.x += particle.Velocity.x * deltaTime;
 		particle.Pos.y += particle.Velocity.y * deltaTime;
 		particle.Pos.z += particle.Velocity.z * deltaTime;
-
-		particle.accumulatedForce = { 0,0,0 };
 	}
 
-	//pin the top row verticies every 4 verticies
-	for (int x = totalParticles - 1; x > totalParticles - 1 - NumberVerticiesX; x--)
+	// Apply spring forces as positional constraints
+	for (int iter = 0; iter < constraintIterations; iter++)
 	{
-		if (x % 4 == 0)
+		for (Spring& spring : clothSprings)
 		{
-			particles[x].Pos = particles[x].PrevPos; // lock in place
-			particles[x].Velocity = { 0,0,0 };
+			Particle& A = particles[spring.ParticleIndiceA];
+			Particle& B = particles[spring.ParticleIndiceB];
+
+			//get position difference in each axis
+			float dx = B.Pos.x - A.Pos.x;
+			float dy = B.Pos.y - A.Pos.y;
+			float dz = B.Pos.z - A.Pos.z;
+
+			float currentLength = sqrt(dx * dx + dy * dy + dz * dz);
+			if (currentLength == 0.0f)
+			{
+				currentLength = 0.00001f; //avoid dividing by 0
+			}
+
+			//get unit direction
+			float ux = dx / currentLength;
+			float uy = dy / currentLength;
+			float uz = dz / currentLength;
+
+			float stretch = currentLength - spring.restLength;
+			float maxLength = maxStretchLimit * spring.restLength;
+
+			// Apply spring correction only if overstretched (past max spring stretch)
+			if (currentLength > maxLength)
+			{
+				float overStretch = currentLength - maxLength;
+				float invMassA = A.IsPinned ? 0.0f : 1.0f / A.mass; //condition, if yes then 0.0 is no then 1.0
+				float invMassB = B.IsPinned ? 0.0f : 1.0f / B.mass;
+				float totalInvMass = invMassA + invMassB;
+
+				if (totalInvMass > 0.0f)
+				{
+					float corrA = overStretch * (invMassA / totalInvMass);
+					float corrB = overStretch * (invMassB / totalInvMass);
+
+					//apply correction forces
+					if (!A.IsPinned)
+					{
+						A.Pos.x += ux * corrA;
+						A.Pos.y += uy * corrA;
+						A.Pos.z += uz * corrA;
+					}
+
+					if (!B.IsPinned)
+					{
+						B.Pos.x -= ux * corrB;
+						B.Pos.y -= uy * corrB;
+						B.Pos.z -= uz * corrB;
+					}
+				}
+
+				currentLength = maxLength;
+			}
+
+			// apply spring damping to velocity
+			if (!A.IsPinned)
+			{
+				float relVel = (B.Velocity.x - A.Velocity.x) * ux +
+					(B.Velocity.y - A.Velocity.y) * uy +
+					(B.Velocity.z - A.Velocity.z) * uz;
+
+				float dampForce = -spring.dampingConstant * relVel;
+
+				A.Velocity.x -= ux * dampForce / A.mass * deltaTime;
+				A.Velocity.y -= uy * dampForce / A.mass * deltaTime;
+				A.Velocity.z -= uz * dampForce / A.mass * deltaTime;
+			}
+
+			if (!B.IsPinned)
+			{
+				float relVel = (B.Velocity.x - A.Velocity.x) * ux +
+					(B.Velocity.y - A.Velocity.y) * uy +
+					(B.Velocity.z - A.Velocity.z) * uz;
+
+				float dampForce = -spring.dampingConstant * relVel;
+
+				B.Velocity.x += ux * dampForce / B.mass * deltaTime;
+				B.Velocity.y += uy * dampForce / B.mass * deltaTime;
+				B.Velocity.z += uz * dampForce / B.mass * deltaTime;
+			}
 		}
 	}
 
+	int topRowStart = totalParticles - NumberVerticiesX - 1; // index of top-left
+
+	// update the pinned vertexes
+	for (int col = 0; col <= NumberVerticiesX - 1; col++) // skip edges
+	{
+		int idx = topRowStart + col;
+		if (particles[idx].IsPinned)
+		{
+			particles[idx].Pos = particles[idx].PrevPos; // lock in place
+			particles[idx].Velocity = { 0,0,0 };
+		}
+	}
+
+	//velocity re-calculation post all of update loop integration
+	for (Particle& particle : particles)
+	{
+		if (!particle.IsPinned)
+		{
+			particle.Velocity.x = (particle.Pos.x - particle.PrevPos.x) / deltaTime;
+			particle.Velocity.y = (particle.Pos.y - particle.PrevPos.y) / deltaTime;
+			particle.Velocity.z = (particle.Pos.z - particle.PrevPos.z) / deltaTime;
+		}
+	}
 }
 
 void DX11PhysicsFramework::Update()

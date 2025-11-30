@@ -49,6 +49,7 @@ struct VS_INPUT
     float3 AccumulatedForce : ACCUMULATEDFORCE;
     float Mass : MASS;
     float2 Tex : TEXCOORD0;
+    bool IsPinned : IsPinned;
 };
 
 //--------------------------------------------------------------------------------------

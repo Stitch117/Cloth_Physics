@@ -1032,7 +1032,19 @@ void DX11PhysicsFramework::Draw()
 	//verticies buttons
 	ImGui::TextColored(ImVec4(1, 1, 1, 1), "Click to change the amount  of verticies");
 	ImGui::BeginChild("verticies buttons");
-	if (ImGui::Button("1024 (32 X 32)" , ImVec2(150, 40)))
+	if (ImGui::Button("64 (8 X 8)" , ImVec2(150, 40)))
+	{
+		NumberVerticiesX = 8;
+		NumberVerticiesY = 8;
+		ClothresizeCheck = true;
+	}
+	if (ImGui::Button("256 (16 X 16)", ImVec2(150, 40)))
+	{
+		NumberVerticiesX = 16;
+		NumberVerticiesY = 16;
+		ClothresizeCheck = true;
+	}
+	if (ImGui::Button("1024 (32 X 32)", ImVec2(150, 40)))
 	{
 		NumberVerticiesX = 32;
 		NumberVerticiesY = 32;

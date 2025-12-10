@@ -73,6 +73,9 @@ private:
 	float _cameraOrbitAngleXZ = -90.0f;
 	float _cameraSpeed = 2.0f;
 
+	float lastMouseX = 0.0f;
+	float lastMouseY = 0.0f;
+
 	ConstantBuffer _cbData;
 
 	ID3D11DepthStencilState* _DSLessEqual;

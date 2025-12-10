@@ -691,6 +691,36 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 	const int constraintIterations = 10; //stability loop count for positional constraints
 	const float maxStretchLimit = 1.2f; // max multiplier of rest length
 
+
+	//get Ray From mouse to cloth
+	//get mouse pos
+	POINT mousePoint;
+	GetCursorPos(&mousePoint);
+
+	ScreenToClient(_windowHandle, &mousePoint);
+
+	//convert to NDC 
+	float mouseX = (float)mousePoint.x / _WindowWidth * 2.0f - 1.0f;
+	float mouseY = (float)mousePoint.y / _WindowHeight * 2.0f - 1.0f;
+
+	//invert view projection
+	XMMATRIX inverseVP = XMMatrixInverse(nullptr, XMMatrixMultiply(XMLoadFloat4x4(&_camera->GetView()), XMLoadFloat4x4(&_camera->GetProjection())));
+
+
+	XMFLOAT4 mouseRayNear = XMFLOAT4(mouseX, mouseY, 0.01f, 1.0f);
+	XMFLOAT4 mouseRayFar = XMFLOAT4(mouseX, mouseY, 200.0f, 1.0f);
+
+	XMVECTOR nearWorld = XMVector4Transform(XMLoadFloat4(&mouseRayNear), inverseVP);
+	XMVECTOR farWorld = XMVector4Transform(XMLoadFloat4(&mouseRayFar), inverseVP);
+
+	//ray 
+	XMVECTOR rayOrigin = nearWorld;
+	XMVECTOR rayDirection = XMVector3Normalize(XMVectorSubtract(farWorld, nearWorld));
+
+
+	float tempXForce = XMVectorGetX(rayOrigin);
+	float tempYForce = XMVectorGetY(rayOrigin);
+
 	// Apply gravity and velocity update (semi-implicit Euler)
 	for (Particle& particle : particles)
 	{
@@ -699,12 +729,27 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 			particle.Velocity.y += GRAVITYFORCE * deltaTime;
 		}
 
+		if (particle.Pos.x > tempXForce - 0.25f && particle.Pos.x < tempXForce + 0.25 &&
+			particle.Pos.y > tempYForce - 0.25f && particle.Pos.y < tempYForce + 0.25)
+		{
+			float MouseForceX = (tempXForce - lastMouseX) * 1000.0f;
+			float MouseForceY = (tempYForce - lastMouseY) * 1000.0f;
+
+			particle.Velocity.x += MouseForceX * deltaTime;
+			particle.Velocity.y += MouseForceY * deltaTime;
+		}
+
+
 		// Integrate velocity to position
 		particle.PrevPos = particle.Pos;
 		particle.Pos.x += particle.Velocity.x * deltaTime;
 		particle.Pos.y += particle.Velocity.y * deltaTime;
 		particle.Pos.z += particle.Velocity.z * deltaTime;
+
 	}
+
+	lastMouseX = tempXForce;
+	lastMouseY = tempYForce;
 
 	// Apply spring forces as positional constraints
 	for (int iter = 0; iter < constraintIterations; iter++)
@@ -828,6 +873,8 @@ void DX11PhysicsFramework::Update()
 	float deltaTime = frameTime.count();
 
 	accumulator += deltaTime;
+	
+
 
 	if (CurrentFPSInt == NATURALFPS) // run at natural FPS
 	{

@@ -720,9 +720,13 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 	XMVECTOR rayOrigin = nearWorld;
 	XMVECTOR rayDirection = XMVector3Normalize(XMVectorSubtract(farWorld, nearWorld));
 
+	//vector of particles to destroy at end of loop
+	std::vector<int> particlesToDelete;
+
 	// Apply gravity and velocity update (semi-implicit Euler)
-	for (Particle& particle : particles)
+	for (int i = particles.size() - 1; i >= 0; i--)
 	{
+		Particle& particle = particles[i]; 
 		if (!particle.IsPinned)
 		{
 			particle.Velocity.y += GRAVITYFORCE * deltaTime;
@@ -755,6 +759,11 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 
 				particle.Velocity.x += MouseForceX * deltaTime;
 				particle.Velocity.y += MouseForceY * deltaTime;
+
+				if (GetAsyncKeyState(VK_LBUTTON) & 0x01 && _windowHandle == GetForegroundWindow()) 
+				{
+					particlesToDelete.push_back(i);
+				}
 
 				lastMouseX = cx;
 				lastMouseY = cy;
@@ -880,6 +889,32 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 			particle.Velocity.z = (particle.Pos.z - particle.PrevPos.z) / deltaTime;
 		}
 	}
+
+	//destroy particles
+	for (int k = particlesToDelete.size() - 1; k >= 0; k--)
+	{
+		int i = particlesToDelete[k];
+
+		// Remove connected springs
+		clothSprings.erase(
+			std::remove_if(
+				clothSprings.begin(),
+				clothSprings.end(),
+				[&](const Spring& s) { return s.ParticleIndiceA == i || s.ParticleIndiceB == i; }
+			),
+			clothSprings.end()
+		);
+
+		// Remove particle
+		particles.erase(particles.begin() + i);
+
+		// Update remaining spring indices
+		for (auto& s : clothSprings)
+		{
+			if (s.ParticleIndiceA > i) s.ParticleIndiceA--;
+			if (s.ParticleIndiceB > i) s.ParticleIndiceB--;
+		}
+	}
 }
 
 void DX11PhysicsFramework::Update()
@@ -891,8 +926,6 @@ void DX11PhysicsFramework::Update()
 	float deltaTime = frameTime.count();
 
 	accumulator += deltaTime;
-	
-
 
 	if (CurrentFPSInt == NATURALFPS) // run at natural FPS
 	{

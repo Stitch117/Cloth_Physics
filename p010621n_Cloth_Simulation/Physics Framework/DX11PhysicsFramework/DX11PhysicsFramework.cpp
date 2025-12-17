@@ -280,6 +280,7 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 	totalParticles = NumberVerticiesX * NumberVerticiesY;
 	float spacing = 3.0f / NumberVerticiesX;
 	int tempindex = 0;
+	numberofParticlesDestroyed = 0;
 
 	//define all particles first so spring checks can work
 	for (int y = 0; y < NumberVerticiesY; y++)
@@ -720,9 +721,6 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 	XMVECTOR rayOrigin = nearWorld;
 	XMVECTOR rayDirection = XMVector3Normalize(XMVectorSubtract(farWorld, nearWorld));
 
-	//vector of particles to destroy at end of loop
-	std::vector<int> particlesToDelete;
-
 	// Apply gravity and velocity update (semi-implicit Euler)
 	for (int i = particles.size() - 1; i >= 0; i--)
 	{
@@ -760,7 +758,7 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 				particle.Velocity.x += MouseForceX * deltaTime;
 				particle.Velocity.y += MouseForceY * deltaTime;
 
-				if (GetAsyncKeyState(VK_LBUTTON) & 0x01 && _windowHandle == GetForegroundWindow()) 
+				if (GetAsyncKeyState(VK_RBUTTON) & 0x8000 && _windowHandle == GetForegroundWindow()) 
 				{
 					particlesToDelete.push_back(i);
 				}
@@ -871,7 +869,7 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 	// update the pinned vertexes
 	for (int col = 0; col <= NumberVerticiesX - 1; col++) // skip edges
 	{
-		int idx = topRowStart + col;
+		int idx = topRowStart + col - numberofParticlesDestroyed;
 		if (particles[idx].IsPinned)
 		{
 			particles[idx].Pos = particles[idx].PrevPos; // lock in place
@@ -914,7 +912,12 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 			if (s.ParticleIndiceA > i) s.ParticleIndiceA--;
 			if (s.ParticleIndiceB > i) s.ParticleIndiceB--;
 		}
+
+		numberofParticlesDestroyed++;
+
 	}
+
+	particlesToDelete.clear();
 }
 
 void DX11PhysicsFramework::Update()

@@ -129,6 +129,10 @@ private:
 	float shearSpringConst = structuralSpringConst * 0.75;
 	float bendSpringConst = structuralSpringConst * 0.1;
 
+	//deleting spring variables
+	std::vector<int> particlesToDelete;
+	int numberofParticlesDestroyed = 0;
+
 	//check for cloth resize
 	bool ClothresizeCheck = false;
 

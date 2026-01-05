@@ -752,8 +752,8 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 				float cy = XMVectorGetY(closest);
 
 				// Force based on mouse movement
-				float MouseForceX = (cx - lastMouseX) * 500.0f;
-				float MouseForceY = (cy - lastMouseY) * 500.0f;
+				float MouseForceX = (cx - lastMouseX) * MOUSEFORCE;
+				float MouseForceY = (cy - lastMouseY) * MOUSEFORCE;
 
 				particle.Velocity.x += MouseForceX * deltaTime;
 				particle.Velocity.y += MouseForceY * deltaTime;
@@ -1121,6 +1121,11 @@ void DX11PhysicsFramework::Draw()
 	if (ImGui::Button("Full Face", ImVec2(100, 40)))
 	{
 		_immediateContext->RSSetState(_CWcullModeFill);
+		CurrentStateInt = FILL;
+	}
+	if (ImGui::Button("No CULL", ImVec2(100, 40)))
+	{
+		_immediateContext->RSSetState(_CWcullModeNone);
 		CurrentStateInt = FILL;
 	}
 	ImGui::EndChild();

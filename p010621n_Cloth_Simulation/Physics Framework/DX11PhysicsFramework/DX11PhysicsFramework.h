@@ -22,6 +22,7 @@
 #define FPS60 1.0f/60.0f 
 #define FPS120 1.0f/120.0f 
 #define GRAVITYFORCE -9.8f
+#define MOUSEFORCE 5000.0f
 
 using namespace DirectX;
 

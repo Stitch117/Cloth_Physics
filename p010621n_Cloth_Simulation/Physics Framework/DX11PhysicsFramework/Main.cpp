@@ -11,6 +11,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 
 	if (FAILED(application.Initialise(hInstance, nCmdShow)))
 	{
+		OutputDebugStringA("Application initialise failed!\n"); 
 		return -1;
 	}
 

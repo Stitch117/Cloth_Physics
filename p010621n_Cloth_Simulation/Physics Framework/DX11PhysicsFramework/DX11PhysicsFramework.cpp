@@ -54,11 +54,12 @@ HRESULT DX11PhysicsFramework::Initialise(HINSTANCE hInstance, int nShowCmd)
 	hr = CreateSwapChainAndFrameBuffer();
 	if (FAILED(hr)) { OutputDebugStringA("FAIL: SwapChain\n"); return hr; }
 
+	hr = InitVertexIndexBuffers();
+	if (FAILED(hr)) { OutputDebugStringA("FAIL: InitVertexIndexBuffers\n"); return hr; }
+
 	hr = InitShadersAndInputLayout();
 	if (FAILED(hr)) { OutputDebugStringA("FAIL: InitShadersAndInputLayout\n"); return hr; }
 
-	hr = InitVertexIndexBuffers();
-	if (FAILED(hr)) { OutputDebugStringA("FAIL: InitVertexIndexBuffers\n"); return hr; }
 
 	hr = InitPipelineStates();
 	if (FAILED(hr)) { OutputDebugStringA("FAIL: InitPipelineStates\n"); return hr; }
@@ -209,27 +210,94 @@ HRESULT DX11PhysicsFramework::InitShadersAndInputLayout()
 	dwShaderFlags |= D3DCOMPILE_DEBUG;
 #endif
 
-	ID3DBlob* vsBlob;
+	//------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	//compute shader creation
+	D3D11_BUFFER_DESC desc = {};
+	desc.Usage = D3D11_USAGE_DEFAULT;
+	desc.ByteWidth = sizeof(Particle) * static_cast<UINT>(particles.size());
+	desc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
+	desc.CPUAccessFlags = 0;
+	desc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	desc.StructureByteStride = sizeof(Particle);
 
-    // Compile the vertex shader
-    hr = D3DCompileFromFile(L"SimpleShaders.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS_main", "vs_5_0", dwShaderFlags, 0, &vsBlob, &errorBlob);
-	if (FAILED(hr))
-	{
-		MessageBoxA(_windowHandle, (char*)errorBlob->GetBufferPointer(), nullptr, ERROR);
-		errorBlob->Release();
+	D3D11_SUBRESOURCE_DATA initData = {};
+	initData.pSysMem = particles.data();
+
+	hr = _device->CreateBuffer(&desc, &initData, &ComputeStructuredBuffer);
+	if (FAILED(hr)) {
+		OutputDebugStringA("Failed to create structured buffer for particles!\n");
 		return hr;
 	}
 
-	// Create the vertex shader
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+	srvDesc.Buffer.FirstElement = 0;
+	srvDesc.Buffer.NumElements = static_cast<UINT>(particles.size());
+	srvDesc.Format = DXGI_FORMAT_UNKNOWN; 
+
+	hr = _device->CreateShaderResourceView(ComputeStructuredBuffer, &srvDesc, &ComputeSRV);
+	if (FAILED(hr)) {
+		OutputDebugStringA("Failed to create SRV for structured buffer!\n");
+		return hr;
+	}
+
+	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+	uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+	uavDesc.Buffer.FirstElement = 0;
+	uavDesc.Buffer.NumElements = static_cast<UINT>(particles.size());
+	uavDesc.Buffer.Flags = 0;
+	uavDesc.Format = DXGI_FORMAT_UNKNOWN;
+
+	hr = _device->CreateUnorderedAccessView(ComputeStructuredBuffer, &uavDesc, &ComputeUAV);
+	if (FAILED(hr)) {
+		OutputDebugStringA("Failed to create UAV for structured buffer!\n");
+		return hr;
+	}
+
+	D3D11_BUFFER_DESC cbDesc = {};
+	cbDesc.Usage = D3D11_USAGE_DEFAULT;
+	cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	cbDesc.ByteWidth = sizeof(ClothSimParams);
+	cbDesc.CPUAccessFlags = 0;
+
+	hr = _device->CreateBuffer(&cbDesc, nullptr, &ComputeConstantBuffer);
+	if (FAILED(hr)) {
+		OutputDebugStringA("Failed to create constant buffer!\n");
+		return hr;
+	}
+
+	ID3DBlob* csBlob = nullptr;
+
+	hr = D3DCompileFromFile(L"ComputeShader.hlsl", nullptr, nullptr, "CSMain", "cs_5_0", 0, 0, &csBlob, &errorBlob);
+	if (FAILED(hr)) {
+		if (errorBlob) {
+			OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+			errorBlob->Release();
+		}
+		if (csBlob) csBlob->Release();
+		return hr;
+	}
+
+	hr = _device->CreateComputeShader(csBlob->GetBufferPointer(), csBlob->GetBufferSize(), nullptr, &ComputeShader);
+	csBlob->Release();
+	if (FAILED(hr)) {
+		OutputDebugStringA("Failed to create compute shader!\n");
+		return hr;
+	}
+	//--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+	// Create the vertex shader on simple hlsl
+	ID3DBlob* vsBlob = nullptr;
+	hr = D3DCompileFromFile(L"SimpleShaders.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS_main", "vs_5_0", dwShaderFlags, 0, &vsBlob, &errorBlob); 
 	hr = _device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &_vertexShader);
 
 	if (FAILED(hr))
-	{	
+	{
 		vsBlob->Release();
-        return hr;
+		return hr;
 	}
 
-	// Compile the pixel shader
+	// Create the pixel shader
 	ID3DBlob* psBlob;
 	hr = D3DCompileFromFile(L"SimpleShaders.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS_main", "ps_5_0", dwShaderFlags, 0, &psBlob, &errorBlob);
 	if (FAILED(hr))
@@ -259,11 +327,10 @@ HRESULT DX11PhysicsFramework::InitShadersAndInputLayout()
 	_device->CreateInputLayout(inputElementDesc, ARRAYSIZE(inputElementDesc), vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), &_inputLayout);
 
 	if (FAILED(hr))
-		return hr;
+	return hr;
 
 	vsBlob->Release();
 	psBlob->Release();
-	errorBlob->Release();
 
 	return hr;
 }
@@ -689,6 +756,28 @@ DX11PhysicsFramework::~DX11PhysicsFramework()
 
 void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 {
+	////////////////////////////////////////////////////////////////////////////////////////////////
+
+	// Send data to GPU
+	ClothSimParams params;
+	params.dt = deltaTime;
+	params.gravity = XMFLOAT3(0, -90.8f, 0);
+
+	// Set compute shader
+	_immediateContext->UpdateSubresource(ComputeConstantBuffer, 0, nullptr, &params, 0, 0); 
+	_immediateContext->CSSetShader(ComputeShader, nullptr, 0); 
+	_immediateContext->CSSetConstantBuffers(0, 1, &ComputeConstantBuffer);
+	_immediateContext->CSSetUnorderedAccessViews(0, 1, &ComputeUAV, nullptr); 
+
+	// Dispatch compute
+	UINT threadGroups = (UINT)particles.size() / 256 + 1;
+	_immediateContext->Dispatch(threadGroups, 1, 1);
+
+	// Unbind UAV
+	ID3D11UnorderedAccessView* nullUAV = nullptr;
+	_immediateContext->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+	///////////////////////////////////////////////////////////////////////////////////////////////
+
 	const int constraintIterations = 10; //stability loop count for positional constraints
 	const float maxStretchLimit = 1.2f; // max multiplier of rest length
 
@@ -930,6 +1019,31 @@ void DX11PhysicsFramework::Update()
 
 	accumulator += deltaTime;
 
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//compute shader batch
+	ClothSimParams params; 
+	params.dt = deltaTime; 
+	params.gravity = XMFLOAT3(0, -9.8f, 0); 
+
+	// Upload constants 
+	_immediateContext->UpdateSubresource(ComputeConstantBuffer, 0, nullptr, &params, 0, 0); 
+
+	// Bind compute
+	_immediateContext->CSSetShader(ComputeShader, nullptr, 0); 
+	_immediateContext->CSSetConstantBuffers(0, 1, &ComputeConstantBuffer); 
+	_immediateContext->CSSetUnorderedAccessViews(0, 1, &ComputeUAV, nullptr); 
+
+	// Dispatch threads
+	UINT threadCount = sizeof(Particle) * particles.size(); 
+	UINT groups = (threadCount + 255) / 256; 
+	_immediateContext->Dispatch(groups, 1, 1); 
+
+	// Unbind UAV
+	ID3D11UnorderedAccessView* nullUAV = nullptr; 
+	_immediateContext->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr); 
+	 
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 	if (CurrentFPSInt == NATURALFPS) // run at natural FPS
 	{
 		_camera->Update();
@@ -949,6 +1063,7 @@ void DX11PhysicsFramework::Update()
 
 	else if (CurrentFPSInt == SIXTYFPS)  //run the update loop if on 60FPS
 	{
+		while (accumulator >= FPS60)
 		while (accumulator >= FPS60)
 		{
 			_camera->Update();
@@ -1071,6 +1186,11 @@ void DX11PhysicsFramework::Draw()
 		memcpy(mapped.pData, &_cbData, sizeof(_cbData));
 		_immediateContext->Unmap(_constantBuffer, 0);
 	}
+
+	//compute shader
+	_immediateContext->VSSetShaderResources(0, 1, &ComputeSRV); 
+
+
 
 	UINT stride = sizeof(Particle);
 	UINT offset = 0;

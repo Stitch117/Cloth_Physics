@@ -43,7 +43,13 @@ struct Particle
 	XMFLOAT3 accumulatedForce;
 	float mass;
 	XMFLOAT2 TexC;
-	boolean IsPinned;
+	int IsPinned;
+};
+
+struct ClothSimParams
+{
+	float dt;
+	XMFLOAT3 gravity;
 };
 
 struct Spring

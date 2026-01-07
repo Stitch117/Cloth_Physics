@@ -60,6 +60,15 @@ private:
 	ID3D11ShaderResourceView* _GroundTextureRV = nullptr;
 	ID3D11ShaderResourceView* _HerculesTextureRV = nullptr;
 
+	//compute shader variables
+	ID3D11ComputeShader* ComputeShader = nullptr;
+
+	ID3D11Buffer* ComputeStructuredBuffer = nullptr;
+	ID3D11UnorderedAccessView* ComputeUAV = nullptr;
+	ID3D11ShaderResourceView* ComputeSRV = nullptr;
+
+	ID3D11Buffer* ComputeConstantBuffer = nullptr;
+
 	ID3D11SamplerState* _samplerLinear = nullptr;
 
 	Light basicLight;

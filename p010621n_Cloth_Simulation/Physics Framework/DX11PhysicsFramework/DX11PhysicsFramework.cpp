@@ -266,6 +266,35 @@ HRESULT DX11PhysicsFramework::InitShadersAndInputLayout()
 		return hr;
 	}
 
+	D3D11_BUFFER_DESC readDesc = {};
+	readDesc.ByteWidth = sizeof(Particle) * particles.size();
+	readDesc.Usage = D3D11_USAGE_STAGING;
+	readDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+	readDesc.StructureByteStride = sizeof(Particle);
+	readDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+
+	_device->CreateBuffer(&readDesc, nullptr, &ComputeReadbackBuffer);  
+
+	//sping buffer
+	D3D11_BUFFER_DESC springDesc = {};
+	springDesc.Usage = D3D11_USAGE_DEFAULT;
+	springDesc.ByteWidth = sizeof(Spring) * clothSprings.size();
+	springDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	springDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	springDesc.StructureByteStride = sizeof(Spring);
+
+	D3D11_SUBRESOURCE_DATA springData = {};
+	springData.pSysMem = clothSprings.data();
+
+	_device->CreateBuffer(&springDesc, &springData, &SpringBuffer);
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC springSRVDesc = {};
+	springSRVDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+	springSRVDesc.Buffer.NumElements = clothSprings.size();
+	springSRVDesc.Format = DXGI_FORMAT_UNKNOWN;
+
+	_device->CreateShaderResourceView(SpringBuffer, &springSRVDesc, &SpringSRV);
+
 	ID3DBlob* csBlob = nullptr;
 
 	hr = D3DCompileFromFile(L"ComputeShader.hlsl", nullptr, nullptr, "CSMain", "cs_5_0", 0, 0, &csBlob, &errorBlob);
@@ -333,6 +362,78 @@ HRESULT DX11PhysicsFramework::InitShadersAndInputLayout()
 	psBlob->Release();
 
 	return hr;
+}
+
+//used when resizing cloth to reset the compute shader
+void DX11PhysicsFramework::RebuildComputeBuffers()
+{
+	if (ComputeStructuredBuffer) ComputeStructuredBuffer->Release();
+	if (ComputeSRV) ComputeSRV->Release();
+	if (ComputeUAV) ComputeUAV->Release();
+	if (ComputeReadbackBuffer) ComputeReadbackBuffer->Release();
+
+	D3D11_BUFFER_DESC desc = {};
+	desc.Usage = D3D11_USAGE_DEFAULT;
+	desc.ByteWidth = sizeof(Particle) * particles.size();
+	desc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
+	desc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	desc.StructureByteStride = sizeof(Particle);
+
+	D3D11_SUBRESOURCE_DATA initData = {};
+	initData.pSysMem = particles.data();
+
+	_device->CreateBuffer(&desc, &initData, &ComputeStructuredBuffer);
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+	srvDesc.Buffer.NumElements = particles.size();
+	srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+
+	_device->CreateShaderResourceView(ComputeStructuredBuffer, &srvDesc, &ComputeSRV);
+
+	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+	uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+	uavDesc.Buffer.NumElements = particles.size();
+	uavDesc.Format = DXGI_FORMAT_UNKNOWN;
+
+	_device->CreateUnorderedAccessView(ComputeStructuredBuffer, &uavDesc, &ComputeUAV);
+
+	D3D11_BUFFER_DESC readDesc = {};
+	readDesc.ByteWidth = sizeof(Particle) * particles.size();
+	readDesc.Usage = D3D11_USAGE_STAGING;
+	readDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+	readDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	readDesc.StructureByteStride = sizeof(Particle);
+
+	_device->CreateBuffer(&readDesc, nullptr, &ComputeReadbackBuffer);
+
+	//spring buffer
+	if (SpringBuffer) SpringBuffer->Release();
+	if (SpringSRV) SpringSRV->Release();
+
+	LastSpringCount = clothSprings.size();
+
+	if (LastSpringCount == 0)
+		return;
+
+	desc = {};
+	desc.Usage = D3D11_USAGE_DEFAULT;
+	desc.ByteWidth = UINT(sizeof(Spring) * LastSpringCount);
+	desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	desc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	desc.StructureByteStride = sizeof(Spring);
+
+	D3D11_SUBRESOURCE_DATA init = {};
+	init.pSysMem = clothSprings.data();
+
+	_device->CreateBuffer(&desc, &init, &SpringBuffer);
+
+	srvDesc = {};
+	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+	srvDesc.Buffer.NumElements = (UINT)LastSpringCount;
+	srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+
+	_device->CreateShaderResourceView(SpringBuffer, &srvDesc, &SpringSRV);
 }
 
 HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
@@ -757,256 +858,280 @@ DX11PhysicsFramework::~DX11PhysicsFramework()
 void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 {
 	////////////////////////////////////////////////////////////////////////////////////////////////
+	if (UsingComputeShader)
+	{
+		// Send data to GPU
+		ClothSimParams params;
+		params.dt = deltaTime;
+		params.gravity = XMFLOAT3(0, -9.8f, 0);
+		params.constraintIterations = constraintIterations; 
+		params.maxStretchLimit = maxStretchLimit;
+		params.numOfSprings = clothSprings.size();
 
-	// Send data to GPU
-	ClothSimParams params;
-	params.dt = deltaTime;
-	params.gravity = XMFLOAT3(0, -90.8f, 0);
+		// Set compute shader
+		_immediateContext->UpdateSubresource(ComputeConstantBuffer, 0, nullptr, &params, 0, 0);
 
-	// Set compute shader
-	_immediateContext->UpdateSubresource(ComputeConstantBuffer, 0, nullptr, &params, 0, 0); 
-	_immediateContext->CSSetShader(ComputeShader, nullptr, 0); 
-	_immediateContext->CSSetConstantBuffers(0, 1, &ComputeConstantBuffer);
-	_immediateContext->CSSetUnorderedAccessViews(0, 1, &ComputeUAV, nullptr); 
+		//unbind previous shaders
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+		_immediateContext->VSSetShaderResources(0, 1, &nullSRV);
 
-	// Dispatch compute
-	UINT threadGroups = (UINT)particles.size() / 256 + 1;
-	_immediateContext->Dispatch(threadGroups, 1, 1);
+		_immediateContext->CSSetShader(ComputeShader, nullptr, 0);
+		_immediateContext->CSSetConstantBuffers(0, 1, &ComputeConstantBuffer);
+		_immediateContext->CSSetUnorderedAccessViews(0, 1, &ComputeUAV, nullptr);
 
-	// Unbind UAV
-	ID3D11UnorderedAccessView* nullUAV = nullptr;
-	_immediateContext->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
-	///////////////////////////////////////////////////////////////////////////////////////////////
+		//spring buffer
+		ID3D11ShaderResourceView* srvs[] = { SpringSRV };
+		_immediateContext->CSSetShaderResources(0, 1, srvs);
 
-	const int constraintIterations = 10; //stability loop count for positional constraints
-	const float maxStretchLimit = 1.2f; // max multiplier of rest length
+		// Dispatch compute
+		int threadGroups = particles.size() / 256 + 1;
+		_immediateContext->Dispatch(threadGroups, 1, 1);
 
+		// Unbind UAV
+		ID3D11UnorderedAccessView* nullUAV = nullptr;
+		_immediateContext->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
 
-	//get Ray From mouse to cloth
+		//sping buffer unbind
+		nullSRV = nullptr;
+		_immediateContext->CSSetShaderResources(0, 1, &nullSRV);
+
+		//get data back from compute shader
+		_immediateContext->CopyResource(ComputeReadbackBuffer, ComputeStructuredBuffer); 
+
+		D3D11_MAPPED_SUBRESOURCE mapped;
+		_immediateContext->Map(ComputeReadbackBuffer, 0, D3D11_MAP_READ, 0, &mapped);
+		memcpy(particles.data(), mapped.pData, sizeof(Particle) * particles.size());
+		_immediateContext->Unmap(ComputeReadbackBuffer, 0);
+	}
+	//////////////////////////////////////////////////////////////////////////////////////////////
+	else
+	{
+		//get Ray From mouse to cloth
 	//get mouse pos
-	POINT mousePoint;
-	GetCursorPos(&mousePoint);
+		POINT mousePoint;
+		GetCursorPos(&mousePoint);
 
-	ScreenToClient(_windowHandle, &mousePoint);
+		ScreenToClient(_windowHandle, &mousePoint);
 
-	//convert to NDC 
-	float mouseX = (float)mousePoint.x / _WindowWidth * 2.0f - 1.0f;
-	float mouseY = 1.0f - ((float)mousePoint.y / _WindowHeight * 2.0f); //directX inverts Y
+		//convert to NDC 
+		float mouseX = (float)mousePoint.x / _WindowWidth * 2.0f - 1.0f;
+		float mouseY = 1.0f - ((float)mousePoint.y / _WindowHeight * 2.0f); //directX inverts Y
 
-	//invert view projection
-	XMMATRIX inverseVP = XMMatrixInverse(nullptr, XMMatrixMultiply(XMLoadFloat4x4(&_camera->GetView()), XMLoadFloat4x4(&_camera->GetProjection())));
-	 
-	XMFLOAT4 mouseRayNear = XMFLOAT4(mouseX, mouseY, 0.0f, 1.0f); 
-	XMFLOAT4 mouseRayFar = XMFLOAT4(mouseX, mouseY, 1.0f, 1.0f); 
+		//invert view projection
+		XMMATRIX inverseVP = XMMatrixInverse(nullptr, XMMatrixMultiply(XMLoadFloat4x4(&_camera->GetView()), XMLoadFloat4x4(&_camera->GetProjection())));
 
-	XMVECTOR nearWorld = XMVector4Transform(XMLoadFloat4(&mouseRayNear), inverseVP); 
-	XMVECTOR farWorld = XMVector4Transform(XMLoadFloat4(&mouseRayFar), inverseVP); 
+		XMFLOAT4 mouseRayNear = XMFLOAT4(mouseX, mouseY, 0.0f, 1.0f);
+		XMFLOAT4 mouseRayFar = XMFLOAT4(mouseX, mouseY, 1.0f, 1.0f);
 
-	// Perspective divide 
-	nearWorld = XMVectorScale(nearWorld, 1.0f / XMVectorGetW(nearWorld));
-	farWorld = XMVectorScale(farWorld, 1.0f / XMVectorGetW(farWorld));
+		XMVECTOR nearWorld = XMVector4Transform(XMLoadFloat4(&mouseRayNear), inverseVP);
+		XMVECTOR farWorld = XMVector4Transform(XMLoadFloat4(&mouseRayFar), inverseVP);
 
-	//ray 
-	XMVECTOR rayOrigin = nearWorld;
-	XMVECTOR rayDirection = XMVector3Normalize(XMVectorSubtract(farWorld, nearWorld));
+		// Perspective divide 
+		nearWorld = XMVectorScale(nearWorld, 1.0f / XMVectorGetW(nearWorld));
+		farWorld = XMVectorScale(farWorld, 1.0f / XMVectorGetW(farWorld));
 
-	// Apply gravity and velocity update (semi-implicit Euler)
-	for (int i = particles.size() - 1; i >= 0; i--)
-	{
-		Particle& particle = particles[i]; 
-		if (!particle.IsPinned)
+		//ray 
+		XMVECTOR rayOrigin = nearWorld;
+		XMVECTOR rayDirection = XMVector3Normalize(XMVectorSubtract(farWorld, nearWorld));
+
+		// Apply gravity and velocity update (semi-implicit Euler)
+		for (int i = particles.size() - 1; i >= 0; i--)
 		{
-			particle.Velocity.y += GRAVITYFORCE * deltaTime;
-
-			//add mouse movement 
-			XMVECTOR P = XMLoadFloat3(&particle.Pos);
-
-			// vector from ray origin to particle
-			XMVECTOR OP = P - rayOrigin;
-
-			// projection of OP onto ray direction 
-			float t = XMVectorGetX(XMVector3Dot(OP, rayDirection));
-
-			// closest point on the ray to the particle
-			XMVECTOR closest = rayOrigin + rayDirection * t;
-
-			// distance between particle and the ray
-			XMVECTOR diff = P - closest;
-			float distSq = XMVectorGetX(XMVector3LengthSq(diff));
-
-			const float radius = 0.5f; //radius of particles affected
-			if (distSq < radius * radius)
+			Particle& particle = particles[i];
+			if (!particle.IsPinned)
 			{
-				float cx = XMVectorGetX(closest);
-				float cy = XMVectorGetY(closest);
+				particle.Velocity.y += GRAVITYFORCE * deltaTime;
 
-				// Force based on mouse movement
-				float MouseForceX = (cx - lastMouseX) * MOUSEFORCE;
-				float MouseForceY = (cy - lastMouseY) * MOUSEFORCE;
+				//add mouse movement 
+				XMVECTOR P = XMLoadFloat3(&particle.Pos);
 
-				particle.Velocity.x += MouseForceX * deltaTime;
-				particle.Velocity.y += MouseForceY * deltaTime;
+				// vector from ray origin to particle
+				XMVECTOR OP = P - rayOrigin;
 
-				if (GetAsyncKeyState(VK_RBUTTON) & 0x8000 && _windowHandle == GetForegroundWindow()) 
+				// projection of OP onto ray direction 
+				float t = XMVectorGetX(XMVector3Dot(OP, rayDirection));
+
+				// closest point on the ray to the particle
+				XMVECTOR closest = rayOrigin + rayDirection * t;
+
+				// distance between particle and the ray
+				XMVECTOR diff = P - closest;
+				float distSq = XMVectorGetX(XMVector3LengthSq(diff));
+
+				const float radius = 0.1f; //radius of particles affected
+				if (distSq < radius * radius)
 				{
-					particlesToDelete.push_back(i);
-				}
+					float cx = XMVectorGetX(closest);
+					float cy = XMVectorGetY(closest);
 
-				lastMouseX = cx;
-				lastMouseY = cy;
-			}
-		}
+					// Force based on mouse movement
+					float MouseForceX = (cx - lastMouseX) * MOUSEFORCE;
+					float MouseForceY = (cy - lastMouseY) * MOUSEFORCE;
 
-		// Integrate velocity to position
-		particle.PrevPos = particle.Pos;
-		particle.Pos.x += particle.Velocity.x * deltaTime;
-		particle.Pos.y += particle.Velocity.y * deltaTime;
-		particle.Pos.z += particle.Velocity.z * deltaTime;
+					particle.Velocity.x += MouseForceX * deltaTime;
+					particle.Velocity.y += MouseForceY * deltaTime;
 
-	}
-
-	// Apply spring forces as positional constraints
-	for (int iter = 0; iter < constraintIterations; iter++)
-	{
-		for (Spring& spring : clothSprings)
-		{
-			Particle& A = particles[spring.ParticleIndiceA];
-			Particle& B = particles[spring.ParticleIndiceB];
-
-			//get position difference in each axis
-			float dx = B.Pos.x - A.Pos.x;
-			float dy = B.Pos.y - A.Pos.y;
-			float dz = B.Pos.z - A.Pos.z;
-
-			float currentLength = sqrt(dx * dx + dy * dy + dz * dz);
-			if (currentLength == 0.0f)
-			{
-				currentLength = 0.00001f; //avoid dividing by 0
-			}
-
-			//get unit direction
-			float ux = dx / currentLength;
-			float uy = dy / currentLength;
-			float uz = dz / currentLength;
-
-			float stretch = currentLength - spring.restLength;
-			float maxLength = maxStretchLimit * spring.restLength;
-
-			// Apply spring correction only if overstretched (past max spring stretch)
-			if (currentLength > maxLength)
-			{
-				float overStretch = currentLength - maxLength;
-				float invMassA = A.IsPinned ? 0.0f : 1.0f / A.mass; //condition, if yes then 0.0 is no then 1.0
-				float invMassB = B.IsPinned ? 0.0f : 1.0f / B.mass;
-				float totalInvMass = invMassA + invMassB;
-
-				if (totalInvMass > 0.0f)
-				{
-					float corrA = overStretch * (invMassA / totalInvMass);
-					float corrB = overStretch * (invMassB / totalInvMass);
-
-					//apply correction forces
-					if (!A.IsPinned)
+					if (GetAsyncKeyState(VK_RBUTTON) & 0x8000 && _windowHandle == GetForegroundWindow())
 					{
-						A.Pos.x += ux * corrA;
-						A.Pos.y += uy * corrA;
-						A.Pos.z += uz * corrA;
+						particlesToDelete.push_back(i);
 					}
 
-					if (!B.IsPinned)
-					{
-						B.Pos.x -= ux * corrB;
-						B.Pos.y -= uy * corrB;
-						B.Pos.z -= uz * corrB;
-					}
+					lastMouseX = cx;
+					lastMouseY = cy;
+				}
+			}
+
+			// Integrate velocity to position
+			particle.PrevPos = particle.Pos;
+			particle.Pos.x += particle.Velocity.x * deltaTime;
+			particle.Pos.y += particle.Velocity.y * deltaTime;
+			particle.Pos.z += particle.Velocity.z * deltaTime;
+
+		}
+
+		// Apply spring forces as positional constraints
+		for (int iter = 0; iter < constraintIterations; iter++)
+		{
+			for (Spring& spring : clothSprings)
+			{
+				Particle& A = particles[spring.ParticleIndiceA];
+				Particle& B = particles[spring.ParticleIndiceB];
+
+				//get position difference in each axis
+				float dx = B.Pos.x - A.Pos.x;
+				float dy = B.Pos.y - A.Pos.y;
+				float dz = B.Pos.z - A.Pos.z;
+
+				float currentLength = sqrt(dx * dx + dy * dy + dz * dz);
+				if (currentLength == 0.0f)
+				{
+					currentLength = 0.00001f; //avoid dividing by 0
 				}
 
-				currentLength = maxLength;
-			}
+				//get unit direction
+				float ux = dx / currentLength;
+				float uy = dy / currentLength;
+				float uz = dz / currentLength;
 
-			// apply spring damping to velocity
-			if (!A.IsPinned)
+				float stretch = currentLength - spring.restLength;
+				float maxLength = maxStretchLimit * spring.restLength;
+
+				// Apply spring correction only if overstretched (past max spring stretch)
+				if (currentLength > maxLength)
+				{
+					float overStretch = currentLength - maxLength;
+					float invMassA = A.IsPinned ? 0.0f : 1.0f / A.mass; //condition, if yes then 0.0 is no then 1.0
+					float invMassB = B.IsPinned ? 0.0f : 1.0f / B.mass;
+					float totalInvMass = invMassA + invMassB;
+
+					if (totalInvMass > 0.0f)
+					{
+						float corrA = overStretch * (invMassA / totalInvMass);
+						float corrB = overStretch * (invMassB / totalInvMass);
+
+						//apply correction forces
+						if (!A.IsPinned)
+						{
+							A.Pos.x += ux * corrA;
+							A.Pos.y += uy * corrA;
+							A.Pos.z += uz * corrA;
+						}
+
+						if (!B.IsPinned)
+						{
+							B.Pos.x -= ux * corrB;
+							B.Pos.y -= uy * corrB;
+							B.Pos.z -= uz * corrB;
+						}
+					}
+
+					currentLength = maxLength;
+				}
+
+				// apply spring damping to velocity
+				if (!A.IsPinned)
+				{
+					float relVel = (B.Velocity.x - A.Velocity.x) * ux +
+						(B.Velocity.y - A.Velocity.y) * uy +
+						(B.Velocity.z - A.Velocity.z) * uz;
+
+					float dampForce = -spring.dampingConstant * relVel;
+
+					A.Velocity.x -= ux * dampForce / A.mass * deltaTime;
+					A.Velocity.y -= uy * dampForce / A.mass * deltaTime;
+					A.Velocity.z -= uz * dampForce / A.mass * deltaTime;
+				}
+
+				if (!B.IsPinned)
+				{
+					float relVel = (B.Velocity.x - A.Velocity.x) * ux +
+						(B.Velocity.y - A.Velocity.y) * uy +
+						(B.Velocity.z - A.Velocity.z) * uz;
+
+					float dampForce = -spring.dampingConstant * relVel;
+
+					B.Velocity.x += ux * dampForce / B.mass * deltaTime;
+					B.Velocity.y += uy * dampForce / B.mass * deltaTime;
+					B.Velocity.z += uz * dampForce / B.mass * deltaTime;
+				}
+			}
+		}
+
+		int topRowStart = totalParticles - NumberVerticiesX - 1; // index of top-left
+
+		// update the pinned vertexes
+		for (int col = 0; col <= NumberVerticiesX - 1; col++) // skip edges
+		{
+			int idx = topRowStart + col - numberofParticlesDestroyed;
+			if (particles[idx].IsPinned)
 			{
-				float relVel = (B.Velocity.x - A.Velocity.x) * ux +
-					(B.Velocity.y - A.Velocity.y) * uy +
-					(B.Velocity.z - A.Velocity.z) * uz;
-
-				float dampForce = -spring.dampingConstant * relVel;
-
-				A.Velocity.x -= ux * dampForce / A.mass * deltaTime;
-				A.Velocity.y -= uy * dampForce / A.mass * deltaTime;
-				A.Velocity.z -= uz * dampForce / A.mass * deltaTime;
+				particles[idx].Pos = particles[idx].PrevPos; // lock in place
+				particles[idx].Velocity = { 0,0,0 };
 			}
+		}
 
-			if (!B.IsPinned)
+		//velocity re-calculation post all of update loop integration
+		for (Particle& particle : particles)
+		{
+			if (!particle.IsPinned)
 			{
-				float relVel = (B.Velocity.x - A.Velocity.x) * ux +
-					(B.Velocity.y - A.Velocity.y) * uy +
-					(B.Velocity.z - A.Velocity.z) * uz;
-
-				float dampForce = -spring.dampingConstant * relVel;
-
-				B.Velocity.x += ux * dampForce / B.mass * deltaTime;
-				B.Velocity.y += uy * dampForce / B.mass * deltaTime;
-				B.Velocity.z += uz * dampForce / B.mass * deltaTime;
+				particle.Velocity.x = (particle.Pos.x - particle.PrevPos.x) / deltaTime;
+				particle.Velocity.y = (particle.Pos.y - particle.PrevPos.y) / deltaTime;
+				particle.Velocity.z = (particle.Pos.z - particle.PrevPos.z) / deltaTime;
 			}
 		}
-	}
 
-	int topRowStart = totalParticles - NumberVerticiesX - 1; // index of top-left
-
-	// update the pinned vertexes
-	for (int col = 0; col <= NumberVerticiesX - 1; col++) // skip edges
-	{
-		int idx = topRowStart + col - numberofParticlesDestroyed;
-		if (particles[idx].IsPinned)
+		//destroy particles
+		for (int k = particlesToDelete.size() - 1; k >= 0; k--)
 		{
-			particles[idx].Pos = particles[idx].PrevPos; // lock in place
-			particles[idx].Velocity = { 0,0,0 };
-		}
-	}
+			int i = particlesToDelete[k];
 
-	//velocity re-calculation post all of update loop integration
-	for (Particle& particle : particles)
-	{
-		if (!particle.IsPinned)
-		{
-			particle.Velocity.x = (particle.Pos.x - particle.PrevPos.x) / deltaTime;
-			particle.Velocity.y = (particle.Pos.y - particle.PrevPos.y) / deltaTime;
-			particle.Velocity.z = (particle.Pos.z - particle.PrevPos.z) / deltaTime;
-		}
-	}
+			// Remove connected springs
+			clothSprings.erase(
+				std::remove_if(
+					clothSprings.begin(),
+					clothSprings.end(),
+					[&](const Spring& s) { return s.ParticleIndiceA == i || s.ParticleIndiceB == i; }
+				),
+				clothSprings.end()
+			);
 
-	//destroy particles
-	for (int k = particlesToDelete.size() - 1; k >= 0; k--)
-	{
-		int i = particlesToDelete[k];
+			// Remove particle
+			particles.erase(particles.begin() + i);
 
-		// Remove connected springs
-		clothSprings.erase(
-			std::remove_if(
-				clothSprings.begin(),
-				clothSprings.end(),
-				[&](const Spring& s) { return s.ParticleIndiceA == i || s.ParticleIndiceB == i; }
-			),
-			clothSprings.end()
-		);
+			// Update remaining spring indices
+			for (auto& s : clothSprings)
+			{
+				if (s.ParticleIndiceA > i) s.ParticleIndiceA--;
+				if (s.ParticleIndiceB > i) s.ParticleIndiceB--;
+			}
 
-		// Remove particle
-		particles.erase(particles.begin() + i);
+			numberofParticlesDestroyed++;
 
-		// Update remaining spring indices
-		for (auto& s : clothSprings)
-		{
-			if (s.ParticleIndiceA > i) s.ParticleIndiceA--;
-			if (s.ParticleIndiceB > i) s.ParticleIndiceB--;
 		}
 
-		numberofParticlesDestroyed++;
-
+		particlesToDelete.clear();
 	}
-
-	particlesToDelete.clear();
 }
 
 void DX11PhysicsFramework::Update()
@@ -1018,31 +1143,6 @@ void DX11PhysicsFramework::Update()
 	float deltaTime = frameTime.count();
 
 	accumulator += deltaTime;
-
-	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	//compute shader batch
-	ClothSimParams params; 
-	params.dt = deltaTime; 
-	params.gravity = XMFLOAT3(0, -9.8f, 0); 
-
-	// Upload constants 
-	_immediateContext->UpdateSubresource(ComputeConstantBuffer, 0, nullptr, &params, 0, 0); 
-
-	// Bind compute
-	_immediateContext->CSSetShader(ComputeShader, nullptr, 0); 
-	_immediateContext->CSSetConstantBuffers(0, 1, &ComputeConstantBuffer); 
-	_immediateContext->CSSetUnorderedAccessViews(0, 1, &ComputeUAV, nullptr); 
-
-	// Dispatch threads
-	UINT threadCount = sizeof(Particle) * particles.size(); 
-	UINT groups = (threadCount + 255) / 256; 
-	_immediateContext->Dispatch(groups, 1, 1); 
-
-	// Unbind UAV
-	ID3D11UnorderedAccessView* nullUAV = nullptr; 
-	_immediateContext->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr); 
-	 
-	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	if (CurrentFPSInt == NATURALFPS) // run at natural FPS
 	{
@@ -1125,7 +1225,11 @@ void DX11PhysicsFramework::Update()
 		particles.clear();
 		indices.clear();
 		clothSprings.clear();
+
+		//reset buffers
 		InitVertexIndexBuffers();
+		RebuildComputeBuffers(); 
+
 		ClothresizeCheck = false;
 	}
 
@@ -1305,6 +1409,27 @@ void DX11PhysicsFramework::Draw()
 		NumberVerticiesX = 256;
 		NumberVerticiesY = 256;
 		ClothresizeCheck = true;
+	}
+	ImGui::EndChild();
+	ImGui::End();
+
+	//use compute shader buttons
+	ImGui::Begin("Compute shader Buttons");
+
+	// Display contents in a scrolling region
+	ImGui::TextColored(ImVec4(1, 1, 1, 1), "Change the way of calculating the physics");
+	ImGui::BeginChild("CPU button");
+	if (ImGui::Button("CPU", ImVec2(100, 40)))
+	{
+		UsingComputeShader = false;
+		constraintIterations = 10; 
+		maxStretchLimit = 1.3f;
+	}
+	if (ImGui::Button("Copute Shader", ImVec2(100, 40)))
+	{
+		UsingComputeShader = true;
+		constraintIterations = 10;
+		maxStretchLimit = 1.3f;
 	}
 	ImGui::EndChild();
 	ImGui::End();

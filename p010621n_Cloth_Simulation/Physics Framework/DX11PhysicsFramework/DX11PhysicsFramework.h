@@ -133,6 +133,11 @@ private:
 	std::vector<unsigned int> indices;
 	ID3D11Buffer* indexBuffer = nullptr;
 
+	ID3D11Buffer* ComputeReadbackBuffer = nullptr; 
+	ID3D11Buffer* SpringBuffer = nullptr;
+	ID3D11ShaderResourceView* SpringSRV = nullptr;
+	size_t LastSpringCount = 0;
+
 	//spring vector
 	std::vector<Spring> clothSprings;
 	const float structuralSpringConst = 500;
@@ -146,6 +151,13 @@ private:
 	//check for cloth resize
 	bool ClothresizeCheck = false;
 
+	//cloth update variables
+	int constraintIterations = 10; //stability loop count for positional constraints
+	float maxStretchLimit = 1.2f; // max multiplier of rest length
+
+	//compute
+	bool UsingComputeShader = false;
+
 private:
 	HRESULT CreateWindowHandle(HINSTANCE hInstance, int nCmdShow);
 	HRESULT CreateD3DDevice();
@@ -154,6 +166,7 @@ private:
 	HRESULT InitVertexIndexBuffers();
 	HRESULT InitPipelineStates();
 	HRESULT InitRunTimeData();
+	void RebuildComputeBuffers();
 
 public:
 	~DX11PhysicsFramework();

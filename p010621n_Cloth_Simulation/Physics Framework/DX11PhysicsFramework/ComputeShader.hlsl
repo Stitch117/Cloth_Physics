@@ -21,6 +21,10 @@ struct Spring
 
 RWStructuredBuffer<Particle> particles : register(u0);
 StructuredBuffer<Spring> clothSprings : register(t0);
+RWStructuredBuffer<int3> positionDeltas : register(u1);
+RWStructuredBuffer<uint> deltaCounts : register(u2);
+
+static const float FIXED_SCALE = 100000.0f;
 
 cbuffer ClothSimParams : register(b0)
 {
@@ -28,86 +32,124 @@ cbuffer ClothSimParams : register(b0)
     float3 gravity;
     int constraintIterations;
     int numOfSprings;
-    int maxStretchLimit;
+    float maxStretchLimit;
     int PAD;
 };
 
-[numthreads(256, 1, 1)]
-void CSMain(uint3 DTid : SV_DispatchThreadID)
+//integrate positions on 256 threads
+[numthreads(1024, 1, 1)]
+void CS_Integrate(uint3 id : SV_DispatchThreadID)
 {
-    uint i = DTid.x;
+    uint i = id.x;
 
     Particle p = particles[i];
-    
-    if (p.IsPinned)
+
+    if (!p.IsPinned)
     {
-        particles[i] = p;
+        float3 temp = p.Pos;
+
+        float3 vel = p.Pos - p.PrevPos;
+        vel += gravity * (dt * dt);
+
+        p.Pos += vel;
+        p.PrevPos = temp;
+    }
+
+    particles[i] = p;
+}
+
+
+//simulate springs on 256 threads
+[numthreads(1024, 1, 1)]
+void CS_SolveSprings(uint3 id : SV_DispatchThreadID)
+{
+    uint s = id.x;
+    if (s >= numOfSprings)
+        return;
+
+    Spring spring = clothSprings[s];
+
+    uint iA = spring.ParticleIndiceA;
+    uint iB = spring.ParticleIndiceB;
+
+    Particle A = particles[iA];
+    Particle B = particles[iB];
+
+    float3 posDifference = B.Pos - A.Pos;
+    float len = length(posDifference);
+    if (len < 0.00001)
+    {
         return;
     }
-    
-    // Apply gravity
-    p.Velocity += gravity * dt;
-    p.PrevPos = p.Pos;
-    p.Pos += p.Velocity * dt;
-    
-    // Apply spring forces as positional constraints
-    for (int iter = 0; iter < constraintIterations; iter++)
+
+    float3 dir = posDifference / len;
+    float diff = len - spring.restLength;
+
+    float invA = A.IsPinned ? 0 : 1 / A.mass;
+    float invB = B.IsPinned ? 0 : 1 / B.mass;
+    float sum = invA + invB;
+
+    if (sum > 0)
     {
-        for (uint s = 0; s < numOfSprings; s++)
+        float3 corr = dir * diff;
+
+        int3 packedA = int3(corr * (invA / sum) * FIXED_SCALE);
+        int3 packedB = int3(-corr * (invB / sum) * FIXED_SCALE);
+
+        if (!A.IsPinned)
         {
-            Spring spring = clothSprings[s];
-            
-            int otherIndex;
-            float sign;
-            
-            if (spring.ParticleIndiceA == i)
-            {
-                otherIndex = spring.ParticleIndiceB;
-                sign = 1.0f;
-            }
-            else if (spring.ParticleIndiceB == i)
-            {
-                otherIndex = spring.ParticleIndiceA;
-                sign = -1.0f;
-            }
-            else
-            {
-                continue;
-            }
-            
-            Particle other = particles[otherIndex];
-            
-            float3 PosDif = other.Pos - p.Pos;
-            float currentLength = length(PosDif);
-            if (currentLength < 0.00001f)
-            {
-                continue;
-            }
-            
-            float maxLength = maxStretchLimit * spring.restLength;
-            
-            if (currentLength > maxLength)
-            {
-                float3 dir = PosDif / currentLength;
-                float overStretch = currentLength - maxLength;
-
-                float invMassP = p.IsPinned ? 0.0f : 1.0f / p.mass;
-                float invMassO = other.IsPinned ? 0.0f : 1.0f / other.mass;
-                float totalInvMass = invMassP + invMassO;
-
-                if (totalInvMass > 0.0f)
-                {
-                    float correction = overStretch * (invMassP / totalInvMass);
-                    p.Velocity += sign * dir * correction;
-                }
-            }
+            InterlockedAdd(positionDeltas[iA].x, packedA.x);
+            InterlockedAdd(positionDeltas[iA].y, packedA.y);
+            InterlockedAdd(positionDeltas[iA].z, packedA.z);
+            InterlockedAdd(deltaCounts[iA], 1);
         }
+
+        if (!B.IsPinned)
+        {
+            InterlockedAdd(positionDeltas[iB].x, packedB.x);
+            InterlockedAdd(positionDeltas[iB].y, packedB.y);
+            InterlockedAdd(positionDeltas[iB].z, packedB.z);
+            InterlockedAdd(deltaCounts[iB], 1);
+        }
+        
     }
-    
-    
-    // Update velocity based on positional change
-    p.Velocity = (p.Pos - p.PrevPos) / dt;
-    p.Pos += p.Velocity * dt;
+
+    particles[iA] = A;
+    particles[iB] = B;
+}
+
+//apply the corrections aftyer to avoid race condition
+[numthreads(1024, 1, 1)]
+void CS_ApplyCorrections(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    Particle p = particles[i];
+
+    if (!p.IsPinned && deltaCounts[i] > 0)
+    {
+        float3 corr = float3(positionDeltas[i]) / FIXED_SCALE / deltaCounts[i];
+
+        p.Pos += corr;
+    }
+
+    positionDeltas[i] = float3(0, 0, 0);
+    deltaCounts[i] = 0;
+
+    particles[i] = p;
+}
+
+//simulate velocity changes on 256 threads
+[numthreads(1024, 1, 1)]
+void CS_UpdateVelocity(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+
+    Particle p = particles[i];
+
+    if (!p.IsPinned)
+    {
+        p.Velocity = (p.Pos - p.PrevPos) / dt;
+    }
 
     particles[i] = p;
 }

@@ -136,6 +136,7 @@ private:
 	ID3D11Buffer* ComputeReadbackBuffer = nullptr; 
 	ID3D11Buffer* SpringBuffer = nullptr;
 	ID3D11ShaderResourceView* SpringSRV = nullptr;
+
 	size_t LastSpringCount = 0;
 
 	//spring vector
@@ -156,7 +157,17 @@ private:
 	float maxStretchLimit = 1.2f; // max multiplier of rest length
 
 	//compute
+	ID3D11ComputeShader* IntegrateCS = nullptr;
+	ID3D11ComputeShader* SolveSpringsCS = nullptr;
+	ID3D11ComputeShader* UpdateVelocityCS = nullptr;
+	ID3D11ComputeShader* UpdateCorrectionsCS = nullptr;
+	ID3D11Buffer* PositionDeltaBuffer = nullptr;
+	ID3D11Buffer* DeltaCountBuffer = nullptr;
+	ID3D11UnorderedAccessView* PositionDeltaUAV = nullptr;
+	ID3D11UnorderedAccessView* DeltaCountUAV = nullptr;
 	bool UsingComputeShader = false;
+
+	void CompileComputeShader(const wchar_t* file, const char* entry, ID3DBlob** blob);
 
 private:
 	HRESULT CreateWindowHandle(HINSTANCE hInstance, int nCmdShow);

@@ -195,6 +195,30 @@ HRESULT DX11PhysicsFramework::CreateSwapChainAndFrameBuffer()
 	return hr;
 }
 
+void DX11PhysicsFramework::CompileComputeShader(const wchar_t* file, const char* entry, ID3DBlob** blob)
+{
+	UINT flags = D3DCOMPILE_ENABLE_STRICTNESS;
+#ifdef _DEBUG
+	flags |= D3DCOMPILE_DEBUG;
+#endif
+
+	ID3DBlob* errorBlob = nullptr;
+
+	HRESULT hr = D3DCompileFromFile(
+		file, nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+		entry, "cs_5_0", flags, 0, blob, &errorBlob);
+
+	if (FAILED(hr))
+	{
+		if (errorBlob)
+		{
+			OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+			errorBlob->Release();
+		}
+	}
+}
+
+
 HRESULT DX11PhysicsFramework::InitShadersAndInputLayout()
 {
 
@@ -295,24 +319,62 @@ HRESULT DX11PhysicsFramework::InitShadersAndInputLayout()
 
 	_device->CreateShaderResourceView(SpringBuffer, &springSRVDesc, &SpringSRV);
 
-	ID3DBlob* csBlob = nullptr;
+	// -------- Position Delta Buffer --------
+	D3D11_BUFFER_DESC deltaDesc = {};
+	deltaDesc.Usage = D3D11_USAGE_DEFAULT;
+	deltaDesc.ByteWidth = sizeof(int) * 3 * particles.size();
+	deltaDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+	deltaDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	deltaDesc.StructureByteStride = sizeof(int) * 3;
 
-	hr = D3DCompileFromFile(L"ComputeShader.hlsl", nullptr, nullptr, "CSMain", "cs_5_0", 0, 0, &csBlob, &errorBlob);
-	if (FAILED(hr)) {
-		if (errorBlob) {
-			OutputDebugStringA((char*)errorBlob->GetBufferPointer());
-			errorBlob->Release();
-		}
-		if (csBlob) csBlob->Release();
-		return hr;
-	}
+	_device->CreateBuffer(&deltaDesc, nullptr, &PositionDeltaBuffer);
 
-	hr = _device->CreateComputeShader(csBlob->GetBufferPointer(), csBlob->GetBufferSize(), nullptr, &ComputeShader);
-	csBlob->Release();
-	if (FAILED(hr)) {
-		OutputDebugStringA("Failed to create compute shader!\n");
-		return hr;
-	}
+	D3D11_UNORDERED_ACCESS_VIEW_DESC deltaUAVDesc = {};
+	deltaUAVDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+	deltaUAVDesc.Buffer.NumElements = particles.size();
+	deltaUAVDesc.Format = DXGI_FORMAT_UNKNOWN;
+
+	_device->CreateUnorderedAccessView(PositionDeltaBuffer, &deltaUAVDesc, &PositionDeltaUAV);
+
+	// -------- Delta Count Buffer --------
+	D3D11_BUFFER_DESC countDesc = {};
+	countDesc.Usage = D3D11_USAGE_DEFAULT;
+	countDesc.ByteWidth = sizeof(UINT) * particles.size();
+	countDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+	countDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	countDesc.StructureByteStride = sizeof(UINT);
+
+	_device->CreateBuffer(&countDesc, nullptr, &DeltaCountBuffer);
+
+	D3D11_UNORDERED_ACCESS_VIEW_DESC countUAVDesc = {};
+	countUAVDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+	countUAVDesc.Buffer.NumElements = particles.size();
+	countUAVDesc.Format = DXGI_FORMAT_UNKNOWN;
+
+	_device->CreateUnorderedAccessView(DeltaCountBuffer, &countUAVDesc, &DeltaCountUAV);
+
+	ID3DBlob* blobIntegrate = nullptr;
+	ID3DBlob* blobSolve = nullptr;
+	ID3DBlob* blobVelocity = nullptr;
+	ID3DBlob* blobCorrecions = nullptr;
+
+	// Compile each kernel from the same file
+	CompileComputeShader(L"ComputeShader.hlsl", "CS_Integrate", &blobIntegrate);
+	CompileComputeShader(L"ComputeShader.hlsl", "CS_SolveSprings", &blobSolve);
+	CompileComputeShader(L"ComputeShader.hlsl", "CS_UpdateVelocity", &blobVelocity);
+	CompileComputeShader(L"ComputeShader.hlsl", "CS_ApplyCorrections", &blobCorrecions);
+
+	// Create compute shader objects
+	_device->CreateComputeShader(blobIntegrate->GetBufferPointer(), blobIntegrate->GetBufferSize(), nullptr, &IntegrateCS);
+	_device->CreateComputeShader(blobSolve->GetBufferPointer(), blobSolve->GetBufferSize(), nullptr, &SolveSpringsCS);
+	_device->CreateComputeShader(blobVelocity->GetBufferPointer(), blobVelocity->GetBufferSize(), nullptr, &UpdateVelocityCS);
+	_device->CreateComputeShader(blobCorrecions->GetBufferPointer(), blobCorrecions->GetBufferSize(), nullptr, &UpdateCorrectionsCS);
+
+	blobIntegrate->Release();
+	blobSolve->Release();
+	blobVelocity->Release();
+	blobCorrecions->Release();
+
 	//--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 	// Create the vertex shader on simple hlsl
@@ -868,32 +930,48 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 		params.maxStretchLimit = maxStretchLimit;
 		params.numOfSprings = clothSprings.size();
 
+		//UAVS
+		ID3D11UnorderedAccessView* uavs[] = { ComputeUAV, PositionDeltaUAV, DeltaCountUAV};
+
 		// Set compute shader
 		_immediateContext->UpdateSubresource(ComputeConstantBuffer, 0, nullptr, &params, 0, 0);
 
-		//unbind previous shaders
-		ID3D11ShaderResourceView* nullSRV = nullptr;
-		_immediateContext->VSSetShaderResources(0, 1, &nullSRV);
-
-		_immediateContext->CSSetShader(ComputeShader, nullptr, 0);
 		_immediateContext->CSSetConstantBuffers(0, 1, &ComputeConstantBuffer);
-		_immediateContext->CSSetUnorderedAccessViews(0, 1, &ComputeUAV, nullptr);
+		_immediateContext->CSSetUnorderedAccessViews(0, 3, uavs, nullptr);
+		_immediateContext->CSSetShaderResources(0, 1, &SpringSRV);
 
-		//spring buffer
-		ID3D11ShaderResourceView* srvs[] = { SpringSRV };
-		_immediateContext->CSSetShaderResources(0, 1, srvs);
 
-		// Dispatch compute
-		int threadGroups = particles.size() / 256 + 1;
-		_immediateContext->Dispatch(threadGroups, 1, 1);
+		//set thread counts
+		int pGroups = (particles.size() + 1023) / 1024;
+		int sGroups = (clothSprings.size() + 1023) / 1024;
 
-		// Unbind UAV
-		ID3D11UnorderedAccessView* nullUAV = nullptr;
-		_immediateContext->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+		// Integrate dispatch
+		_immediateContext->CSSetShader(IntegrateCS, nullptr, 0);
+		_immediateContext->Dispatch(pGroups, 1, 1);
+		ID3D11UnorderedAccessView* nullUAVs[3] = { nullptr, nullptr, nullptr };
+		_immediateContext->CSSetUnorderedAccessViews(0, 3, nullUAVs, nullptr);
+		_immediateContext->CSSetUnorderedAccessViews(0, 3, uavs, nullptr);
 
-		//sping buffer unbind
-		nullSRV = nullptr;
-		_immediateContext->CSSetShaderResources(0, 1, &nullSRV);
+		for (int i = 0; i < constraintIterations; i++)
+		{
+			// Solve constraints dispatch
+			_immediateContext->CSSetShader(SolveSpringsCS, nullptr, 0);
+			_immediateContext->Dispatch(sGroups, 1, 1);
+			_immediateContext->CSSetUnorderedAccessViews(0, 3, nullUAVs, nullptr);
+			_immediateContext->CSSetUnorderedAccessViews(0, 3, uavs, nullptr);
+
+			//apply corrections
+			_immediateContext->CSSetShader(UpdateCorrectionsCS, nullptr, 0);
+			_immediateContext->Dispatch(pGroups, 1, 1);
+			_immediateContext->CSSetUnorderedAccessViews(0, 3, nullUAVs, nullptr);
+			_immediateContext->CSSetUnorderedAccessViews(0, 3, uavs, nullptr);
+		}
+
+		// Update velocity dispatch
+		_immediateContext->CSSetShader(UpdateVelocityCS, nullptr, 0);
+		_immediateContext->Dispatch(pGroups, 1, 1);
+		_immediateContext->CSSetUnorderedAccessViews(0, 3, nullUAVs, nullptr);
+		_immediateContext->CSSetUnorderedAccessViews(0, 3, uavs, nullptr);
 
 		//get data back from compute shader
 		_immediateContext->CopyResource(ComputeReadbackBuffer, ComputeStructuredBuffer); 
@@ -906,7 +984,7 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 	//////////////////////////////////////////////////////////////////////////////////////////////
 	else
 	{
-		//get Ray From mouse to cloth
+	//get Ray From mouse to cloth
 	//get mouse pos
 		POINT mousePoint;
 		GetCursorPos(&mousePoint);
@@ -1425,7 +1503,7 @@ void DX11PhysicsFramework::Draw()
 		constraintIterations = 10; 
 		maxStretchLimit = 1.3f;
 	}
-	if (ImGui::Button("Copute Shader", ImVec2(100, 40)))
+	if (ImGui::Button("Compute Shader", ImVec2(100, 40)))
 	{
 		UsingComputeShader = true;
 		constraintIterations = 10;

@@ -926,7 +926,8 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 		ClothSimParams params;
 		params.dt = deltaTime;
 		params.gravity = XMFLOAT3(0, -9.8f, 0);
-		params.constraintIterations = constraintIterations; 
+		params.NumberVerticiesX = NumberVerticiesX;
+		params.NumberVerticiesY = NumberVerticiesY;
 		params.maxStretchLimit = maxStretchLimit;
 		params.numOfSprings = clothSprings.size();
 
@@ -940,14 +941,16 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 		_immediateContext->CSSetUnorderedAccessViews(0, 3, uavs, nullptr);
 		_immediateContext->CSSetShaderResources(0, 1, &SpringSRV);
 
+		//thread counts
+		int groupsX = (NumberVerticiesX + 15) / 16;
+		int groupsY = (NumberVerticiesY + 15) / 16;
+		int springGroups = (clothSprings.size() + 255) / 256;
 
-		//set thread counts
-		int pGroups = (particles.size() + 1023) / 1024;
-		int sGroups = (clothSprings.size() + 1023) / 1024;
+		_immediateContext->Dispatch(groupsX, groupsY, 1);
 
 		// Integrate dispatch
 		_immediateContext->CSSetShader(IntegrateCS, nullptr, 0);
-		_immediateContext->Dispatch(pGroups, 1, 1);
+		_immediateContext->Dispatch(groupsX, groupsY, 1);
 		ID3D11UnorderedAccessView* nullUAVs[3] = { nullptr, nullptr, nullptr };
 		_immediateContext->CSSetUnorderedAccessViews(0, 3, nullUAVs, nullptr);
 		_immediateContext->CSSetUnorderedAccessViews(0, 3, uavs, nullptr);
@@ -956,20 +959,20 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 		{
 			// Solve constraints dispatch
 			_immediateContext->CSSetShader(SolveSpringsCS, nullptr, 0);
-			_immediateContext->Dispatch(sGroups, 1, 1);
+			_immediateContext->Dispatch(springGroups, 1, 1);
 			_immediateContext->CSSetUnorderedAccessViews(0, 3, nullUAVs, nullptr);
 			_immediateContext->CSSetUnorderedAccessViews(0, 3, uavs, nullptr);
 
 			//apply corrections
 			_immediateContext->CSSetShader(UpdateCorrectionsCS, nullptr, 0);
-			_immediateContext->Dispatch(pGroups, 1, 1);
+			_immediateContext->Dispatch(groupsX, groupsY, 1);
 			_immediateContext->CSSetUnorderedAccessViews(0, 3, nullUAVs, nullptr);
 			_immediateContext->CSSetUnorderedAccessViews(0, 3, uavs, nullptr);
 		}
 
 		// Update velocity dispatch
 		_immediateContext->CSSetShader(UpdateVelocityCS, nullptr, 0);
-		_immediateContext->Dispatch(pGroups, 1, 1);
+		_immediateContext->Dispatch(groupsX, groupsY, 1);
 		_immediateContext->CSSetUnorderedAccessViews(0, 3, nullUAVs, nullptr);
 		_immediateContext->CSSetUnorderedAccessViews(0, 3, uavs, nullptr);
 

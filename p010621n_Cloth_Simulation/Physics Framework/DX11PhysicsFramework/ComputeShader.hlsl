@@ -24,23 +24,29 @@ StructuredBuffer<Spring> clothSprings : register(t0);
 RWStructuredBuffer<int3> positionDeltas : register(u1);
 RWStructuredBuffer<uint> deltaCounts : register(u2);
 
-static const float FIXED_SCALE = 100000.0f;
+static const float FIXED_SCALE = 1000.0f;
 
 cbuffer ClothSimParams : register(b0)
 {
     float dt;
     float3 gravity;
-    int constraintIterations;
+    int NumberVerticiesX;
     int numOfSprings;
     float maxStretchLimit;
-    int PAD;
+    int NumberVerticiesY;
 };
 
 //integrate positions on 256 threads
-[numthreads(1024, 1, 1)]
+[numthreads(16, 16, 1)]
 void CS_Integrate(uint3 id : SV_DispatchThreadID)
 {
-    uint i = id.x;
+    uint x = id.x;
+    uint y = id.y;
+    if (x >= NumberVerticiesX || y >= NumberVerticiesY)
+        return;
+    
+    
+    uint i = y * NumberVerticiesX + x;
 
     Particle p = particles[i];
 
@@ -60,7 +66,7 @@ void CS_Integrate(uint3 id : SV_DispatchThreadID)
 
 
 //simulate springs on 256 threads
-[numthreads(1024, 1, 1)]
+[numthreads(256, 1, 1)]
 void CS_SolveSprings(uint3 id : SV_DispatchThreadID)
 {
     uint s = id.x;
@@ -113,16 +119,20 @@ void CS_SolveSprings(uint3 id : SV_DispatchThreadID)
         }
         
     }
-
-    particles[iA] = A;
-    particles[iB] = B;
+    
 }
 
 //apply the corrections aftyer to avoid race condition
-[numthreads(1024, 1, 1)]
+[numthreads(16, 16, 1)]
 void CS_ApplyCorrections(uint3 id : SV_DispatchThreadID)
 {
-    uint i = id.x;
+    uint x = id.x;
+    uint y = id.y;
+    if (x >= NumberVerticiesX || y >= NumberVerticiesY)
+        return;
+    
+    uint i = y * NumberVerticiesX + x;
+    
     Particle p = particles[i];
 
     if (!p.IsPinned && deltaCounts[i] > 0)
@@ -139,10 +149,15 @@ void CS_ApplyCorrections(uint3 id : SV_DispatchThreadID)
 }
 
 //simulate velocity changes on 256 threads
-[numthreads(1024, 1, 1)]
+[numthreads(16, 16, 1)]
 void CS_UpdateVelocity(uint3 id : SV_DispatchThreadID)
 {
-    uint i = id.x;
+    uint x = id.x;
+    uint y = id.y;
+    if (x >= NumberVerticiesX || y >= NumberVerticiesY)
+        return;
+    
+    uint i = y * NumberVerticiesX + x;
 
     Particle p = particles[i];
 

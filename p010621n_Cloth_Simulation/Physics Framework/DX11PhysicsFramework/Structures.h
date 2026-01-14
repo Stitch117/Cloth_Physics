@@ -50,10 +50,10 @@ struct ClothSimParams
 {
 	float dt;
 	XMFLOAT3 gravity;
-	int constraintIterations;
+	int NumberVerticiesX;
 	int numOfSprings;
 	int maxStretchLimit;
-	int PAD;
+	int NumberVerticiesY;
 };
 
 struct Spring

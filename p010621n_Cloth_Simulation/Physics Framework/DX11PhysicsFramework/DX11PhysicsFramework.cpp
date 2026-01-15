@@ -983,6 +983,121 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 		_immediateContext->Map(ComputeReadbackBuffer, 0, D3D11_MAP_READ, 0, &mapped);
 		memcpy(particles.data(), mapped.pData, sizeof(Particle) * particles.size());
 		_immediateContext->Unmap(ComputeReadbackBuffer, 0);
+
+
+
+		//get Ray From mouse to cloth
+		//get mouse pos
+		POINT mousePoint;
+		GetCursorPos(&mousePoint);
+
+		ScreenToClient(_windowHandle, &mousePoint);
+
+		//convert to NDC 
+		float mouseX = (float)mousePoint.x / _WindowWidth * 2.0f - 1.0f;
+		float mouseY = 1.0f - ((float)mousePoint.y / _WindowHeight * 2.0f); //directX inverts Y
+
+		//invert view projection
+		XMMATRIX inverseVP = XMMatrixInverse(nullptr, XMMatrixMultiply(XMLoadFloat4x4(&_camera->GetView()), XMLoadFloat4x4(&_camera->GetProjection())));
+
+		XMFLOAT4 mouseRayNear = XMFLOAT4(mouseX, mouseY, 0.0f, 1.0f);
+		XMFLOAT4 mouseRayFar = XMFLOAT4(mouseX, mouseY, 1.0f, 1.0f);
+
+		XMVECTOR nearWorld = XMVector4Transform(XMLoadFloat4(&mouseRayNear), inverseVP);
+		XMVECTOR farWorld = XMVector4Transform(XMLoadFloat4(&mouseRayFar), inverseVP);
+
+		// Perspective divide 
+		nearWorld = XMVectorScale(nearWorld, 1.0f / XMVectorGetW(nearWorld));
+		farWorld = XMVectorScale(farWorld, 1.0f / XMVectorGetW(farWorld));
+
+		//ray 
+		XMVECTOR rayOrigin = nearWorld;
+		XMVECTOR rayDirection = XMVector3Normalize(XMVectorSubtract(farWorld, nearWorld));
+
+		// Apply gravity and velocity update (semi-implicit Euler)
+		for (int i = particles.size() - 1; i >= 0; i--)
+		{
+			Particle& particle = particles[i];
+			if (!particle.IsPinned)
+			{
+				//add mouse movement 
+				XMVECTOR P = XMLoadFloat3(&particle.Pos);
+
+				// vector from ray origin to particle
+				XMVECTOR OP = P - rayOrigin;
+
+				// projection of OP onto ray direction 
+				float t = XMVectorGetX(XMVector3Dot(OP, rayDirection));
+
+				// closest point on the ray to the particle
+				XMVECTOR closest = rayOrigin + rayDirection * t;
+
+				// distance between particle and the ray
+				XMVECTOR diff = P - closest;
+				float distSq = XMVectorGetX(XMVector3LengthSq(diff));
+
+				const float radius = 0.5f; //radius of particles affected
+				if (distSq < radius * radius)
+				{
+					float cx = XMVectorGetX(closest);
+					float cy = XMVectorGetY(closest);
+
+					// Force based on mouse movement
+					float MouseForceX = (cx - lastMouseX) * MOUSEFORCE;
+					float MouseForceY = (cy - lastMouseY) * MOUSEFORCE;
+
+					particle.Velocity.x += MouseForceX * deltaTime;
+					particle.Velocity.y += MouseForceY * deltaTime;
+
+					if (GetAsyncKeyState(VK_RBUTTON) & 0x8000 && _windowHandle == GetForegroundWindow())
+					{
+						particlesToDelete.push_back(i);
+					}
+
+					lastMouseX = cx;
+					lastMouseY = cy;
+				}
+			}
+
+			// Integrate velocity to position
+			particle.PrevPos = particle.Pos;
+			particle.Pos.x += particle.Velocity.x * deltaTime;
+			particle.Pos.y += particle.Velocity.y * deltaTime;
+			particle.Pos.z += particle.Velocity.z * deltaTime;
+
+		}
+
+		//destroy particles
+		for (int k = particlesToDelete.size() - 1; k >= 0; k--)
+		{
+			int i = particlesToDelete[k];
+
+			// Remove connected springs
+			clothSprings.erase(
+				std::remove_if(
+					clothSprings.begin(),
+					clothSprings.end(),
+					[&](const Spring& s) { return s.ParticleIndiceA == i || s.ParticleIndiceB == i; }
+				),
+				clothSprings.end()
+			);
+
+			// Remove particle
+			particles.erase(particles.begin() + i);
+
+			// Update remaining spring indices
+			for (auto& s : clothSprings)
+			{
+				if (s.ParticleIndiceA > i) s.ParticleIndiceA--;
+				if (s.ParticleIndiceB > i) s.ParticleIndiceB--;
+			}
+
+			numberofParticlesDestroyed++;
+
+		}
+
+		particlesToDelete.clear();
+
 	}
 	//////////////////////////////////////////////////////////////////////////////////////////////
 	else

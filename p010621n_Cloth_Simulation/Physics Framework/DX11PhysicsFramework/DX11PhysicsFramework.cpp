@@ -1094,7 +1094,6 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 				float uy = dy / currentLength;
 				float uz = dz / currentLength;
 
-				float stretch = currentLength - spring.restLength;
 				float maxLength = maxStretchLimit * spring.restLength;
 
 				// Apply spring correction only if overstretched (past max spring stretch)
@@ -1127,33 +1126,6 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 					}
 
 					currentLength = maxLength;
-				}
-
-				// apply spring damping to velocity
-				if (!A.IsPinned)
-				{
-					float relVel = (B.Velocity.x - A.Velocity.x) * ux +
-						(B.Velocity.y - A.Velocity.y) * uy +
-						(B.Velocity.z - A.Velocity.z) * uz;
-
-					float dampForce = -spring.dampingConstant * relVel;
-
-					A.Velocity.x -= ux * dampForce / A.mass * deltaTime;
-					A.Velocity.y -= uy * dampForce / A.mass * deltaTime;
-					A.Velocity.z -= uz * dampForce / A.mass * deltaTime;
-				}
-
-				if (!B.IsPinned)
-				{
-					float relVel = (B.Velocity.x - A.Velocity.x) * ux +
-						(B.Velocity.y - A.Velocity.y) * uy +
-						(B.Velocity.z - A.Velocity.z) * uz;
-
-					float dampForce = -spring.dampingConstant * relVel;
-
-					B.Velocity.x += ux * dampForce / B.mass * deltaTime;
-					B.Velocity.y += uy * dampForce / B.mass * deltaTime;
-					B.Velocity.z += uz * dampForce / B.mass * deltaTime;
 				}
 			}
 		}
@@ -1509,7 +1481,7 @@ void DX11PhysicsFramework::Draw()
 	if (ImGui::Button("Compute Shader", ImVec2(100, 40)))
 	{
 		UsingComputeShader = true;
-		constraintIterations = 10;
+		constraintIterations = 30;
 		maxStretchLimit = 1.3f;
 	}
 	ImGui::EndChild();

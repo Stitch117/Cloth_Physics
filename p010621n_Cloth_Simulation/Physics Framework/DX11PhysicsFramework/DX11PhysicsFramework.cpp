@@ -1459,10 +1459,6 @@ void DX11PhysicsFramework::Draw()
 		_immediateContext->Unmap(_constantBuffer, 0);
 	}
 
-	//compute shader
-	_immediateContext->VSSetShaderResources(0, 1, &ComputeSRV); 
-
-
 
 	UINT stride = sizeof(Particle);
 	UINT offset = 0;

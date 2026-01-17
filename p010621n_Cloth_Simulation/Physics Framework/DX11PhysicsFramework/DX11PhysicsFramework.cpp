@@ -1401,7 +1401,7 @@ void DX11PhysicsFramework::Update()
 		ClothresizeCheck = false;
 	}
 
-	CurrentFPS = tempFpsTotal / FPSAverageNums.size();
+ 	CurrentFPS = tempFpsTotal / FPSAverageNums.size();
 }
 
 
@@ -1586,13 +1586,13 @@ void DX11PhysicsFramework::Draw()
 	if (ImGui::Button("CPU", ImVec2(100, 40)))
 	{
 		UsingComputeShader = false;
-		constraintIterations = 10; 
+		constraintIterations = 17; 
 		maxStretchLimit = 1.3f;
 	}
 	if (ImGui::Button("Compute Shader", ImVec2(100, 40)))
 	{
 		UsingComputeShader = true;
-		constraintIterations = 30;
+		constraintIterations = 17;
 		maxStretchLimit = 1.3f;
 	}
 	ImGui::EndChild();

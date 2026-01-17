@@ -153,7 +153,7 @@ private:
 	bool ClothresizeCheck = false;
 
 	//cloth update variables
-	int constraintIterations = 10; //stability loop count for positional constraints
+	int constraintIterations = 17; //stability loop count for positional constraints
 	float maxStretchLimit = 1.2f; // max multiplier of rest length
 
 	//compute

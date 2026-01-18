@@ -1586,13 +1586,13 @@ void DX11PhysicsFramework::Draw()
 	if (ImGui::Button("CPU", ImVec2(100, 40)))
 	{
 		UsingComputeShader = false;
-		constraintIterations = 17; 
+		constraintIterations = 50; 
 		maxStretchLimit = 1.3f;
 	}
 	if (ImGui::Button("Compute Shader", ImVec2(100, 40)))
 	{
 		UsingComputeShader = true;
-		constraintIterations = 17;
+		constraintIterations = 50;
 		maxStretchLimit = 1.3f;
 	}
 	ImGui::EndChild();

@@ -834,6 +834,7 @@ HRESULT DX11PhysicsFramework::InitRunTimeData()
 
 	hr = CreateDDSTextureFromFile(_device, L"Resources\\Textures\\stone.dds", nullptr, &_StoneTextureRV);
 	hr = CreateDDSTextureFromFile(_device, L"Resources\\Textures\\floor.dds", nullptr, &_GroundTextureRV);
+	hr = CreateDDSTextureFromFile(_device, L"Resources\\Textures\\ClothTexture.dds", nullptr, &_ClothtextureRV);
 	if (FAILED(hr)) { return hr; }
 
 	// Setup Camera
@@ -844,11 +845,12 @@ HRESULT DX11PhysicsFramework::InitRunTimeData()
 	_camera = new Camera(eye, at, up, (float)_WindowWidth, (float)_WindowHeight, 0.01f, 200.0f);
 
 	// Setup the scene's light
-	basicLight.AmbientLight = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
-	basicLight.DiffuseLight = XMFLOAT4(0.6f, 0.6f, 0.6f, 1.0f);
-	basicLight.SpecularLight = XMFLOAT4(0.8f, 0.8f, 0.8f, 1.0f);
+	basicLight.AmbientLight = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+	basicLight.DiffuseLight = XMFLOAT4(0.75f, 0.75f, 0.75f, 1.0f);
+	basicLight.SpecularLight = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	basicLight.SpecularPower = 10.0f;
-	basicLight.LightVecW = XMFLOAT3(0.0f, 0.5f, -1.0f);
+	basicLight.LightVecW = XMFLOAT3(0.25f, 0.5f, -1.0f);
+	
 
 	Material shinyMaterial;
 	shinyMaterial.ambient = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -906,6 +908,7 @@ DX11PhysicsFramework::~DX11PhysicsFramework()
 	if (_samplerLinear)_samplerLinear->Release();
 	if (_StoneTextureRV)_StoneTextureRV->Release();
 	if (_GroundTextureRV)_GroundTextureRV->Release();
+	if (_ClothtextureRV)_ClothtextureRV->Release();
 	if (_HerculesTextureRV)_HerculesTextureRV->Release();
 
 	if (_dxgiDevice)_dxgiDevice->Release();
@@ -1449,7 +1452,7 @@ void DX11PhysicsFramework::Draw()
 
 	//draw cloth
 	_cbData.HasTexture = 1.0f;
-	_immediateContext->PSSetShaderResources(0, 1, &_StoneTextureRV);
+	_immediateContext->PSSetShaderResources(0, 1, &_ClothtextureRV);
 
 	D3D11_MAPPED_SUBRESOURCE mapped = {};
 	HRESULT hr = _immediateContext->Map(_constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);

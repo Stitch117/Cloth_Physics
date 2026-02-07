@@ -58,6 +58,7 @@ private:
 
 	ID3D11ShaderResourceView* _StoneTextureRV = nullptr;
 	ID3D11ShaderResourceView* _GroundTextureRV = nullptr;
+	ID3D11ShaderResourceView* _ClothtextureRV = nullptr;
 	ID3D11ShaderResourceView* _HerculesTextureRV = nullptr;
 
 	//compute shader variables

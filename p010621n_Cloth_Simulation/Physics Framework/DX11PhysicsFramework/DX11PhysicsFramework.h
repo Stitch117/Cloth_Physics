@@ -17,6 +17,8 @@
 #include "imgui_impl_dx11.h"
 
 #include <vector>
+#include <algorithm>
+#include <set>
 
 #include "GameObject.h"
 #define FPS60 1.0f/60.0f 
@@ -169,6 +171,10 @@ private:
 	bool UsingComputeShader = false;
 
 	void CompileComputeShader(const wchar_t* file, const char* entry, ID3DBlob** blob);
+
+	//delte spring wrap round vector checks
+	std::vector<int> particleGridX;
+	std::vector<int> particleGridY;
 
 private:
 	HRESULT CreateWindowHandle(HINSTANCE hInstance, int nCmdShow);

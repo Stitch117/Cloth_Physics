@@ -522,6 +522,8 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 			p.Pos.y = (y - NumberVerticiesY / 2.0f) * spacing + 0.5f;
 			p.Pos.z = 0.0f; //flat cloth on XY plane
 			p.PrevPos = p.Pos;
+			particleGridX.push_back(x);
+			particleGridY.push_back(y);
 			p.Normal = XMFLOAT3(0, 0, 1);
 			p.accumulatedForce = XMFLOAT3(0.0f, 0.0f, 0.0f);
 			p.Velocity = XMFLOAT3(0.0f, 0.0f, 0.0f);
@@ -653,7 +655,8 @@ HRESULT DX11PhysicsFramework::InitVertexIndexBuffers()
 			}
 
 			//neighbours neighbour spring horizontal
-			if ((tempindex + 2) % NumberVerticiesX != 0 && (tempindex + 2) % NumberVerticiesX != 1)
+			int col = tempindex % NumberVerticiesX;
+			if (col + 2 < NumberVerticiesX)
 			{
 				Spring s;
 				s.ParticleIndiceA = tempindex;
@@ -1039,7 +1042,7 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 				XMVECTOR diff = P - closest;
 				float distSq = XMVectorGetX(XMVector3LengthSq(diff));
 
-				const float radius = 0.5f; //radius of particles affected
+				const float radius = 0.1f; //radius of particles affected
 				if (distSq < radius * radius)
 				{
 					float cx = XMVectorGetX(closest);
@@ -1062,16 +1065,19 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 				}
 			}
 
-			// Integrate velocity to position
-			particle.PrevPos = particle.Pos;
-			particle.Pos.x += particle.Velocity.x * deltaTime;
-			particle.Pos.y += particle.Velocity.y * deltaTime;
-			particle.Pos.z += particle.Velocity.z * deltaTime;
-
 		}
 
+		//sort highest index first
+		std::sort(particlesToDelete.begin(), particlesToDelete.end(), std::greater<int>());
+
+		//remove duplicates to stop double deleting
+		particlesToDelete.erase(
+			std::unique(particlesToDelete.begin(), particlesToDelete.end()),
+			particlesToDelete.end()
+		);
+
 		//destroy particles
-		for (int k = particlesToDelete.size() - 1; k >= 0; k--)
+		for (int k = 0; k < (int)particlesToDelete.size(); k++)
 		{
 			int i = particlesToDelete[k];
 
@@ -1087,6 +1093,8 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 
 			// Remove particle
 			particles.erase(particles.begin() + i);
+			particleGridX.erase(particleGridX.begin() + i);
+			particleGridY.erase(particleGridY.begin() + i);
 
 			// Update remaining spring indices
 			for (auto& s : clothSprings)
@@ -1095,11 +1103,62 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 				if (s.ParticleIndiceB > i) s.ParticleIndiceB--;
 			}
 
+			//delete wrap around springs
+			clothSprings.erase(
+				std::remove_if(clothSprings.begin(), clothSprings.end(),
+					[&](const Spring& s) {
+						int dx = abs(particleGridX[s.ParticleIndiceA] - particleGridX[s.ParticleIndiceB]);
+						int dy = abs(particleGridY[s.ParticleIndiceA] - particleGridY[s.ParticleIndiceB]);
+						return dx > 2 || dy > 2;
+					}),
+				clothSprings.end()
+			);
+
 			numberofParticlesDestroyed++;
 
 		}
 
 		particlesToDelete.clear();
+
+		//rebuild indicies after deleting -- VERY SLOW
+		indices.clear();
+
+		for (int y = 0; y < NumberVerticiesY - 1; y++)
+		{
+			for (int x = 0; x < NumberVerticiesX - 1; x++)
+			{
+				// find flat indices of the 4 quad corners by searching gridX/gridY
+				auto findIdx = [&](int gx, int gy) -> int
+					{
+						for (int p = 0; p < (int)particles.size(); p++)
+						{
+							if (particleGridX[p] == gx && particleGridY[p] == gy) return p;
+						}
+						return -1;
+					};
+
+				int p0 = findIdx(x, y);
+				int p1 = findIdx(x + 1, y);
+				int p2 = findIdx(x, y + 1);
+				int p3 = findIdx(x + 1, y + 1);
+
+				if (p0 < 0 || p1 < 0 || p2 < 0 || p3 < 0) continue; // quad has deleted particle, skip
+
+				indices.push_back(p0); indices.push_back(p2); indices.push_back(p1);
+				indices.push_back(p2); indices.push_back(p3); indices.push_back(p1);
+			}
+		}
+
+		//reupload index buffer
+		if (indexBuffer) indexBuffer->Release();
+		D3D11_BUFFER_DESC ibDesc = {};
+		ibDesc.Usage = D3D11_USAGE_DEFAULT;
+		ibDesc.ByteWidth = sizeof(unsigned int) * indices.size();
+		ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+
+		D3D11_SUBRESOURCE_DATA ibData = {};
+		ibData.pSysMem = indices.data();
+		_device->CreateBuffer(&ibDesc, &ibData, &indexBuffer);
 
 	}
 	//////////////////////////////////////////////////////////////////////////////////////////////
@@ -1248,7 +1307,7 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 			}
 		}
 
-		int topRowStart = totalParticles - NumberVerticiesX - 1; // index of top-left
+		int topRowStart = totalParticles - NumberVerticiesX; // index of top-left
 
 		// update the pinned vertexes
 		for (int col = 0; col <= NumberVerticiesX - 1; col++) // skip edges
@@ -1272,8 +1331,18 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 			}
 		}
 
+
+		//sort highest index first
+		std::sort(particlesToDelete.begin(), particlesToDelete.end(), std::greater<int>());
+
+		//remove duplicates to stop double deleting
+		particlesToDelete.erase(
+			std::unique(particlesToDelete.begin(), particlesToDelete.end()),
+			particlesToDelete.end()
+		);
+
 		//destroy particles
-		for (int k = particlesToDelete.size() - 1; k >= 0; k--)
+		for (int k = 0; k < (int)particlesToDelete.size(); k++)
 		{
 			int i = particlesToDelete[k];
 
@@ -1289,6 +1358,8 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 
 			// Remove particle
 			particles.erase(particles.begin() + i);
+			particleGridX.erase(particleGridX.begin() + i); 
+			particleGridY.erase(particleGridY.begin() + i);
 
 			// Update remaining spring indices
 			for (auto& s : clothSprings)
@@ -1297,11 +1368,62 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 				if (s.ParticleIndiceB > i) s.ParticleIndiceB--;
 			}
 
+			//delete wrap around springs
+			clothSprings.erase(
+				std::remove_if(clothSprings.begin(), clothSprings.end(),
+					[&](const Spring& s) {
+						int dx = abs(particleGridX[s.ParticleIndiceA] - particleGridX[s.ParticleIndiceB]);
+						int dy = abs(particleGridY[s.ParticleIndiceA] - particleGridY[s.ParticleIndiceB]);
+						return dx > 2 || dy > 2;
+					}),
+				clothSprings.end()
+			);
+
 			numberofParticlesDestroyed++;
 
 		}
 
 		particlesToDelete.clear();
+
+		//rebuild indicies after deleting -- VERY SLOW
+		indices.clear();
+
+		for (int y = 0; y < NumberVerticiesY - 1; y++)
+		{
+			for (int x = 0; x < NumberVerticiesX - 1; x++)
+			{
+				// find flat indices of the 4 quad corners by searching gridX/gridY
+				auto findIdx = [&](int gx, int gy) -> int 
+					{
+						for (int p = 0; p < (int)particles.size(); p++)
+						{
+							if (particleGridX[p] == gx && particleGridY[p] == gy) return p;
+						}
+					return -1;
+					};
+
+				int p0 = findIdx(x, y);
+				int p1 = findIdx(x + 1, y);
+				int p2 = findIdx(x, y + 1);
+				int p3 = findIdx(x + 1, y + 1);
+
+				if (p0 < 0 || p1 < 0 || p2 < 0 || p3 < 0) continue; // quad has deleted particle, skip
+
+				indices.push_back(p0); indices.push_back(p2); indices.push_back(p1);
+				indices.push_back(p2); indices.push_back(p3); indices.push_back(p1);
+			}
+		}
+
+		//reupload index buffer
+		if (indexBuffer) indexBuffer->Release();
+		D3D11_BUFFER_DESC ibDesc = {};
+		ibDesc.Usage = D3D11_USAGE_DEFAULT;
+		ibDesc.ByteWidth = sizeof(unsigned int) * indices.size();
+		ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+
+		D3D11_SUBRESOURCE_DATA ibData = {};
+		ibData.pSysMem = indices.data();
+		_device->CreateBuffer(&ibDesc, &ibData, &indexBuffer);
 	}
 }
 
@@ -1396,6 +1518,8 @@ void DX11PhysicsFramework::Update()
 		particles.clear();
 		indices.clear();
 		clothSprings.clear();
+		particleGridX.clear();
+		particleGridY.clear();
 
 		//reset buffers
 		InitVertexIndexBuffers();

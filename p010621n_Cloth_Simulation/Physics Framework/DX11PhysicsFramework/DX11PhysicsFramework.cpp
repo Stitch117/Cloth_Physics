@@ -871,7 +871,7 @@ HRESULT DX11PhysicsFramework::InitRunTimeData()
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 
 	//Resize FPS Vector
-	FPSAverageNums.resize(10);
+	FPSAverageNums.resize(100);
 
 
 	// Setup Platform/Renderer backends
@@ -1326,7 +1326,7 @@ void DX11PhysicsFramework::Update()
 
 
 		//average FPS over 10 frames
-		if (FPSAverageIndex == 10)
+		if (FPSAverageIndex == 100)
 		{
 			FPSAverageIndex = 0;
 		}
@@ -1345,7 +1345,7 @@ void DX11PhysicsFramework::Update()
 			FPSAverageIndex++;
 
 			//average FPS over 10 frames
-			if (FPSAverageIndex == 10)
+			if (FPSAverageIndex == 100)
 			{
 				FPSAverageIndex = 0;
 			}
@@ -1367,7 +1367,7 @@ void DX11PhysicsFramework::Update()
 
 
 			//average FPS over 10 frames
-			if (FPSAverageIndex == 10)
+			if (FPSAverageIndex == 100)
 			{
 				FPSAverageIndex = 0;
 			}

@@ -154,6 +154,7 @@ private:
 
 	//check for cloth resize
 	bool ClothresizeCheck = false;
+	bool particleDeleted = false;
 
 	//cloth update variables
 	int constraintIterations = 50; //stability loop count for positional constraints

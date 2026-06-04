@@ -1115,50 +1115,56 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 			);
 
 			numberofParticlesDestroyed++;
+			particleDeleted = true;
 
 		}
 
 		particlesToDelete.clear();
 
 		//rebuild indicies after deleting -- VERY SLOW
-		indices.clear();
-
-		for (int y = 0; y < NumberVerticiesY - 1; y++)
+		if (particleDeleted)
 		{
-			for (int x = 0; x < NumberVerticiesX - 1; x++)
+			indices.clear();
+
+			for (int y = 0; y < NumberVerticiesY - 1; y++)
 			{
-				// find flat indices of the 4 quad corners by searching gridX/gridY
-				auto findIdx = [&](int gx, int gy) -> int
-					{
-						for (int p = 0; p < (int)particles.size(); p++)
+				for (int x = 0; x < NumberVerticiesX - 1; x++)
+				{
+					// find flat indices of the 4 quad corners by searching gridX/gridY
+					auto findIdx = [&](int gx, int gy) -> int
 						{
-							if (particleGridX[p] == gx && particleGridY[p] == gy) return p;
-						}
-						return -1;
-					};
+							for (int p = 0; p < (int)particles.size(); p++)
+							{
+								if (particleGridX[p] == gx && particleGridY[p] == gy) return p;
+							}
+							return -1;
+						};
 
-				int p0 = findIdx(x, y);
-				int p1 = findIdx(x + 1, y);
-				int p2 = findIdx(x, y + 1);
-				int p3 = findIdx(x + 1, y + 1);
+					int p0 = findIdx(x, y);
+					int p1 = findIdx(x + 1, y);
+					int p2 = findIdx(x, y + 1);
+					int p3 = findIdx(x + 1, y + 1);
 
-				if (p0 < 0 || p1 < 0 || p2 < 0 || p3 < 0) continue; // quad has deleted particle, skip
+					if (p0 < 0 || p1 < 0 || p2 < 0 || p3 < 0) continue; // quad has deleted particle, skip
 
-				indices.push_back(p0); indices.push_back(p2); indices.push_back(p1);
-				indices.push_back(p2); indices.push_back(p3); indices.push_back(p1);
+					indices.push_back(p0); indices.push_back(p2); indices.push_back(p1);
+					indices.push_back(p2); indices.push_back(p3); indices.push_back(p1);
+				}
 			}
+
+			//reupload index buffer
+			if (indexBuffer) indexBuffer->Release();
+			D3D11_BUFFER_DESC ibDesc = {};
+			ibDesc.Usage = D3D11_USAGE_DEFAULT;
+			ibDesc.ByteWidth = sizeof(unsigned int) * indices.size();
+			ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+
+			D3D11_SUBRESOURCE_DATA ibData = {};
+			ibData.pSysMem = indices.data();
+			_device->CreateBuffer(&ibDesc, &ibData, &indexBuffer);
+
+			particleDeleted = false;
 		}
-
-		//reupload index buffer
-		if (indexBuffer) indexBuffer->Release();
-		D3D11_BUFFER_DESC ibDesc = {};
-		ibDesc.Usage = D3D11_USAGE_DEFAULT;
-		ibDesc.ByteWidth = sizeof(unsigned int) * indices.size();
-		ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-
-		D3D11_SUBRESOURCE_DATA ibData = {};
-		ibData.pSysMem = indices.data();
-		_device->CreateBuffer(&ibDesc, &ibData, &indexBuffer);
 
 	}
 	//////////////////////////////////////////////////////////////////////////////////////////////
@@ -1380,50 +1386,57 @@ void DX11PhysicsFramework::ClothUpdate(float deltaTime)
 			);
 
 			numberofParticlesDestroyed++;
+			particleDeleted = true;
 
 		}
 
 		particlesToDelete.clear();
 
-		//rebuild indicies after deleting -- VERY SLOW
-		indices.clear();
 
-		for (int y = 0; y < NumberVerticiesY - 1; y++)
+		if (particleDeleted)
 		{
-			for (int x = 0; x < NumberVerticiesX - 1; x++)
+			//rebuild indicies after deleting -- VERY SLOW
+			indices.clear();
+
+			for (int y = 0; y < NumberVerticiesY - 1; y++)
 			{
-				// find flat indices of the 4 quad corners by searching gridX/gridY
-				auto findIdx = [&](int gx, int gy) -> int 
-					{
-						for (int p = 0; p < (int)particles.size(); p++)
+				for (int x = 0; x < NumberVerticiesX - 1; x++)
+				{
+					// find flat indices of the 4 quad corners by searching gridX/gridY
+					auto findIdx = [&](int gx, int gy) -> int
 						{
-							if (particleGridX[p] == gx && particleGridY[p] == gy) return p;
-						}
-					return -1;
-					};
+							for (int p = 0; p < (int)particles.size(); p++)
+							{
+								if (particleGridX[p] == gx && particleGridY[p] == gy) return p;
+							}
+							return -1;
+						};
 
-				int p0 = findIdx(x, y);
-				int p1 = findIdx(x + 1, y);
-				int p2 = findIdx(x, y + 1);
-				int p3 = findIdx(x + 1, y + 1);
+					int p0 = findIdx(x, y);
+					int p1 = findIdx(x + 1, y);
+					int p2 = findIdx(x, y + 1);
+					int p3 = findIdx(x + 1, y + 1);
 
-				if (p0 < 0 || p1 < 0 || p2 < 0 || p3 < 0) continue; // quad has deleted particle, skip
+					if (p0 < 0 || p1 < 0 || p2 < 0 || p3 < 0) continue; // quad has deleted particle, skip
 
-				indices.push_back(p0); indices.push_back(p2); indices.push_back(p1);
-				indices.push_back(p2); indices.push_back(p3); indices.push_back(p1);
+					indices.push_back(p0); indices.push_back(p2); indices.push_back(p1);
+					indices.push_back(p2); indices.push_back(p3); indices.push_back(p1);
+				}
 			}
+
+			//reupload index buffer
+			if (indexBuffer) indexBuffer->Release();
+			D3D11_BUFFER_DESC ibDesc = {};
+			ibDesc.Usage = D3D11_USAGE_DEFAULT;
+			ibDesc.ByteWidth = sizeof(unsigned int) * indices.size();
+			ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+
+			D3D11_SUBRESOURCE_DATA ibData = {};
+			ibData.pSysMem = indices.data();
+			_device->CreateBuffer(&ibDesc, &ibData, &indexBuffer);
+
+			particleDeleted = false;
 		}
-
-		//reupload index buffer
-		if (indexBuffer) indexBuffer->Release();
-		D3D11_BUFFER_DESC ibDesc = {};
-		ibDesc.Usage = D3D11_USAGE_DEFAULT;
-		ibDesc.ByteWidth = sizeof(unsigned int) * indices.size();
-		ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-
-		D3D11_SUBRESOURCE_DATA ibData = {};
-		ibData.pSysMem = indices.data();
-		_device->CreateBuffer(&ibDesc, &ibData, &indexBuffer);
 	}
 }
 
